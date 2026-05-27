@@ -12,7 +12,7 @@
   --bnf-aqua:    #88e0b8;
   --bnf-offwhite:#f7f0e6;
 
-  --bg: #efe7db;
+  --bg: #d6f73d;
   --panel-bg: #ffffff;
   --panel-border: rgba(63, 62, 62, 0.08);
   --text: #3f3e3e;
@@ -78,12 +78,12 @@ body {
 }
 
 .brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   background:
     linear-gradient(135deg, var(--bnf-marsala) 0%, var(--bnf-aqua) 100%);
-  box-shadow: 0 2px 6px rgba(142, 59, 71, 0.25);
+  box-shadow: 0 3px 8px rgba(110, 5, 48, 0.3);
   flex-shrink: 0;
 }
 
@@ -98,8 +98,9 @@ body {
   margin: 0;
   font-family: 'Bagel Fat One', system-ui, sans-serif;
   font-weight: 400;
-  font-size: 22px;
-  letter-spacing: 0.01em;
+  font-size: 30px;
+  letter-spacing: 0.005em;
+  line-height: 0.95;
   color: var(--text);
   display: inline-flex;
 }
@@ -162,7 +163,12 @@ body {
 }
 
 .btn.primary:hover {
-  background: #7a3340;
+  background: #4a0220;
+}
+
+.btn.is-flashed {
+  background: var(--bnf-aqua);
+  color: var(--bnf-marsala);
 }
 
 /* ───────── layout ───────── */
@@ -645,7 +651,23 @@ body.is-booting .panel .group:nth-child(5) { animation-delay: 0.62s; }
   }
 
   .brand-title {
-    font-size: 18px;
+    font-size: 22px;
+  }
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .topbar {
+    padding: var(--space-3);
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .topbar-actions .btn {
+    padding: 7px 10px;
+    font-size: 12px;
   }
 }
 

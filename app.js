@@ -79,13 +79,37 @@ function cardRect(card) {
   };
 }
 
-function rectCorners(r) {
-  return [
-    { x: r.x,         y: r.y },
-    { x: r.x + r.w,   y: r.y },
-    { x: r.x + r.w,   y: r.y + r.h },
-    { x: r.x,         y: r.y + r.h },
+// Sample the rounded-rect perimeter so the convex hull tracks the
+// curved corners. Each quarter-circle gets SEG+1 points.
+function sampleRoundedRect(rect, radius) {
+  const { x, y, w, h } = rect;
+  const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+  if (r <= 0) {
+    return [
+      { x,         y },
+      { x: x + w,  y },
+      { x: x + w,  y: y + h },
+      { x,         y: y + h },
+    ];
+  }
+  const SEG = 6;
+  const arcs = [
+    { cx: x + w - r, cy: y + r,     a0: -Math.PI / 2 },
+    { cx: x + w - r, cy: y + h - r, a0:  0 },
+    { cx: x + r,     cy: y + h - r, a0:  Math.PI / 2 },
+    { cx: x + r,     cy: y + r,     a0:  Math.PI },
   ];
+  const pts = [];
+  for (const arc of arcs) {
+    for (let i = 0; i <= SEG; i++) {
+      const a = arc.a0 + (i / SEG) * (Math.PI / 2);
+      pts.push({
+        x: arc.cx + r * Math.cos(a),
+        y: arc.cy + r * Math.sin(a),
+      });
+    }
+  }
+  return pts;
 }
 
 // Andrew's monotone chain convex hull.
@@ -144,21 +168,32 @@ function render() {
   // background
   canvasBg.setAttribute('fill', state.bgColor);
 
-  // grid pattern
-  gridPat.setAttribute('width',  state.cell);
-  gridPat.setAttribute('height', state.cell);
-  const gridPath = gridPat.firstElementChild;
-  gridPath.setAttribute('d', `M ${state.cell} 0 L 0 0 0 ${state.cell}`);
-  gridPath.setAttribute('stroke', `rgba(63, 62, 62, ${state.gridOpacity / 100})`);
+  // grid pattern (rounded cells)
+  const cell = state.cell;
+  const pad = Math.max(2, Math.round(cell * 0.08));
+  const inner = cell - pad * 2;
+  const cellR = Math.max(2, Math.round(cell * 0.18));
+  gridPat.setAttribute('width',  cell);
+  gridPat.setAttribute('height', cell);
+  const gridRect = gridPat.firstElementChild;
+  gridRect.setAttribute('x', pad);
+  gridRect.setAttribute('y', pad);
+  gridRect.setAttribute('width',  inner);
+  gridRect.setAttribute('height', inner);
+  gridRect.setAttribute('rx', cellR);
+  gridRect.setAttribute('ry', cellR);
+  gridRect.setAttribute('stroke', `rgba(63, 62, 62, ${state.gridOpacity / 100})`);
   gridBg.setAttribute('fill', state.showGrid ? 'url(#grid-pattern)' : 'transparent');
 
   // rects
   const rA = cardRect(state.A);
   const rB = cardRect(state.B);
 
-  // extrusion hull
-  const hull = convexHull(rectCorners(rA).concat(rectCorners(rB)));
-  const hullPts = hull.map(p => `${p.x},${p.y}`).join(' ');
+  // extrusion hull — sample rounded perimeter so the shadow tracks curves
+  const sampledA = sampleRoundedRect(rA, state.radius);
+  const sampledB = sampleRoundedRect(rB, state.radius);
+  const hull = convexHull(sampledA.concat(sampledB));
+  const hullPts = hull.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 
   const shadowColor = state.shadow.mode === 'auto'
     ? darken(state.B.color, state.shadow.darken)
@@ -208,6 +243,8 @@ function render() {
   const rows = Math.floor(VIEW_H / state.cell);
   metaGrid.textContent  = `Grid ${cols}×${rows} · célula ${state.cell}px`;
   metaCards.textContent = `A ${state.A.w}×${state.A.h} · B ${state.B.w}×${state.B.h}`;
+
+  pushHash();
 }
 
 // ────────────────────────────── controls
@@ -373,27 +410,161 @@ function bindControls() {
     render();
   });
 
-  document.getElementById('btn-export').addEventListener('click', exportSvg);
+  document.getElementById('btn-export-svg').addEventListener('click', exportSvg);
+  document.getElementById('btn-export-png').addEventListener('click', exportPng);
+  document.getElementById('btn-share').addEventListener('click', copyShareLink);
 }
 
-function exportSvg() {
+function buildExportSvg() {
   const clone = stage.cloneNode(true);
   clone.querySelector('#grid-bg').setAttribute('fill', 'transparent');
   const handles = clone.querySelector('#layer-handles');
   if (handles) handles.remove();
-  const xml = new XMLSerializer().serializeToString(clone);
-  const blob = new Blob(
-    ['<?xml version="1.0" encoding="UTF-8"?>\n', xml],
-    { type: 'image/svg+xml' }
-  );
+  clone.setAttribute('width',  VIEW_W);
+  clone.setAttribute('height', VIEW_H);
+  return new XMLSerializer().serializeToString(clone);
+}
+
+function downloadBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `cards-lab-${Date.now()}.svg`;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function exportSvg() {
+  const xml = buildExportSvg();
+  const blob = new Blob(
+    ['<?xml version="1.0" encoding="UTF-8"?>\n', xml],
+    { type: 'image/svg+xml' }
+  );
+  downloadBlob(blob, `cards-lab-${Date.now()}.svg`);
+}
+
+function exportPng() {
+  const xml = buildExportSvg();
+  const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = () => {
+    const scale = 2;
+    const canvas = document.createElement('canvas');
+    canvas.width  = VIEW_W * scale;
+    canvas.height = VIEW_H * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(svgUrl);
+    canvas.toBlob(blob => {
+      if (blob) downloadBlob(blob, `cards-lab-${Date.now()}.png`);
+    }, 'image/png');
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(svgUrl);
+    console.error('PNG export failed');
+  };
+  img.src = svgUrl;
+}
+
+// ────────────────────────────── URL hash (shareable state)
+
+function _h(hex) { return (hex || '').replace('#', ''); }
+function _u(v)   { return v ? '#' + v : '#000000'; }
+
+function serializeState() {
+  const s = state;
+  return [
+    `c=${s.cell}`,
+    `r=${s.radius}`,
+    `g=${s.showGrid ? 1 : 0}`,
+    `o=${s.gridOpacity}`,
+    `bg=${_h(s.bgColor)}`,
+    `a=${s.A.w},${s.A.h},${s.A.col},${s.A.row},${_h(s.A.color)}`,
+    `b=${s.B.w},${s.B.h},${s.B.col},${s.B.row},${_h(s.B.color)}`,
+    `s=${s.shadow.mode},${_h(s.shadow.color)},${s.shadow.darken}`,
+  ].join('&');
+}
+
+function parseCard(str, target) {
+  const parts = str.split(',');
+  if (parts.length < 5) return;
+  const [w, h, col, row, color] = parts;
+  target.w     = clampInt(w,   1, 40);
+  target.h     = clampInt(h,   1, 40);
+  target.col   = clampInt(col, 0, 200);
+  target.row   = clampInt(row, 0, 200);
+  target.color = _u(color);
+  target.size  = 'custom';
+}
+
+function deserializeState(hash) {
+  const clean = hash.replace(/^#/, '');
+  if (!clean) return false;
+  const map = {};
+  clean.split('&').forEach(p => {
+    const i = p.indexOf('=');
+    if (i < 0) return;
+    map[p.slice(0, i)] = p.slice(i + 1);
+  });
+  try {
+    if (map.c)  state.cell        = clampInt(map.c, 8, 200);
+    if (map.r)  state.radius      = clampInt(map.r, 0, 200);
+    if (map.g !== undefined) state.showGrid = map.g === '1';
+    if (map.o)  state.gridOpacity = clampInt(map.o, 0, 100);
+    if (map.bg) state.bgColor     = _u(map.bg);
+    if (map.a)  parseCard(map.a, state.A);
+    if (map.b)  parseCard(map.b, state.B);
+    if (map.s) {
+      const [mode, color, dk] = map.s.split(',');
+      if (mode) state.shadow.mode   = mode;
+      if (color) state.shadow.color = _u(color);
+      if (dk !== undefined) state.shadow.darken = clampInt(dk, 0, 100);
+    }
+    return true;
+  } catch (e) {
+    console.warn('failed to parse hash', e);
+    return false;
+  }
+}
+
+let _hashTimer = null;
+function pushHash() {
+  if (_hashTimer) clearTimeout(_hashTimer);
+  _hashTimer = setTimeout(() => {
+    const next = '#' + serializeState();
+    if (location.hash !== next) {
+      history.replaceState(null, '', next);
+    }
+  }, 200);
+}
+
+async function copyShareLink() {
+  pushHash();
+  // ensure URL is up-to-date even before the debounce fires
+  const url = location.origin + location.pathname + '#' + serializeState();
+  try {
+    await navigator.clipboard.writeText(url);
+    flashShareBtn('Copiado!');
+  } catch (e) {
+    // fallback: open prompt with the URL
+    window.prompt('Copia o link:', url);
+  }
+}
+
+function flashShareBtn(label) {
+  const btn = document.getElementById('btn-share');
+  if (!btn) return;
+  const original = btn.textContent;
+  btn.textContent = label;
+  btn.classList.add('is-flashed');
+  setTimeout(() => {
+    btn.textContent = original;
+    btn.classList.remove('is-flashed');
+  }, 1200);
 }
 
 // ────────────────────────────── drag (move + resize) + tap
@@ -510,6 +681,10 @@ function boot() {
 }
 
 // ────────────────────────────── go
+
+if (location.hash && location.hash.length > 1) {
+  deserializeState(location.hash);
+}
 
 bindControls();
 splitTitle();

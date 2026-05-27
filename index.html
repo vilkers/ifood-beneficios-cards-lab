@@ -20,7 +20,9 @@
     </div>
     <div class="topbar-actions">
       <button id="btn-reset" class="btn ghost" type="button">Reset</button>
-      <button id="btn-export" class="btn primary" type="button">Exportar SVG</button>
+      <button id="btn-share" class="btn ghost" type="button">Link</button>
+      <button id="btn-export-svg" class="btn ghost" type="button">SVG</button>
+      <button id="btn-export-png" class="btn primary" type="button">PNG</button>
     </div>
   </header>
 
@@ -35,7 +37,7 @@
         >
           <defs>
             <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(63,62,62,0.18)" stroke-width="1"/>
+              <rect x="3" y="3" width="34" height="34" rx="5" ry="5" fill="none" stroke="rgba(63,62,62,0.18)" stroke-width="1"/>
             </pattern>
           </defs>
           <rect id="canvas-bg" x="0" y="0" width="1000" height="700" fill="#f7f0e6"/>
