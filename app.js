@@ -6,14 +6,21 @@ const VIEW_W = 1000;
 const VIEW_H = 700;
 
 const PALETTE = [
-  { name: 'Marsala',    hex: '#8e3b47' },
-  { name: 'Azul Água',  hex: '#6cb4b0' },
-  { name: 'Off-white',  hex: '#f7f0e6' },
-  { name: 'Cream',      hex: '#fff4ea' },
-  { name: 'Vermelho',   hex: '#ea1d2c' },
-  { name: 'Amarelo',    hex: '#ffc247' },
-  { name: 'Carbono',    hex: '#3f3e3e' },
-  { name: 'Branco',     hex: '#ffffff' },
+  // claros
+  { name: 'Off-white',      hex: '#f7f0e6' },
+  { name: 'Cream',          hex: '#fff4ea' },
+  { name: 'Rosa Pálido',    hex: '#f8c6dc' },
+  { name: 'Verde Pálido',   hex: '#d8f2e5' },
+  // médios
+  { name: 'Rosa',           hex: '#f291bc' },
+  { name: 'Menta',          hex: '#88e0b8' },
+  { name: 'Magenta',        hex: '#c00755' },
+  { name: 'Verde Mar',      hex: '#4d9f7d' },
+  // escuros
+  { name: 'Marsala',        hex: '#6e0530' },
+  { name: 'Vinho',          hex: '#2d0010' },
+  { name: 'Verde Profundo', hex: '#1f4d40' },
+  { name: 'Vermelho iFood', hex: '#ea1d2c' },
 ];
 
 const SIZES = {
@@ -28,9 +35,9 @@ const DEFAULTS = {
   showGrid: true,
   gridOpacity: 18,
   bgColor: '#f7f0e6',
-  A: { size: 'M', w: 7, h: 4, col: 9, row: 3, color: '#8e3b47' },
-  B: { size: 'S', w: 4, h: 3, col: 3, row: 9, color: '#6cb4b0' },
-  shadow: { mode: 'auto', color: '#5a2630', darken: 35 },
+  A: { size: 'M', w: 7, h: 4, col: 9, row: 3, color: '#6e0530' },
+  B: { size: 'S', w: 4, h: 3, col: 3, row: 9, color: '#88e0b8' },
+  shadow: { mode: 'auto', color: '#2d0010', darken: 35 },
 };
 
 const state = JSON.parse(JSON.stringify(DEFAULTS));
