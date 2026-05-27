@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>iFood Benefícios — Cards Lab</title>
+  <title>Cards Lab — iFood Benefícios</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,8 +14,8 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true"></div>
       <div class="brand-text">
-        <span class="brand-title">iFood Benefícios Cards Lab</span>
-        <span class="brand-sub">v0.1</span>
+        <h1 class="brand-title" data-text="Cards Lab">Cards Lab</h1>
+        <span class="brand-sub">iFood Benefícios · v0.2</span>
       </div>
     </div>
     <div class="topbar-actions">
@@ -35,13 +35,15 @@
         >
           <defs>
             <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(63,62,62,0.08)" stroke-width="1"/>
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(63,62,62,0.18)" stroke-width="1"/>
             </pattern>
           </defs>
+          <rect id="canvas-bg" x="0" y="0" width="1000" height="700" fill="#f7f0e6"/>
           <rect id="grid-bg" x="0" y="0" width="1000" height="700" fill="url(#grid-pattern)"/>
           <g id="layer-shadow"></g>
           <g id="layer-back"></g>
           <g id="layer-front"></g>
+          <g id="layer-handles"></g>
         </svg>
       </div>
       <div class="canvas-meta">
@@ -53,7 +55,7 @@
     <aside class="panel">
       <div class="panel-scroll">
 
-        <div class="group">
+        <div class="group" data-card-group="A">
           <h3 class="group-title">Cartão A <span class="tag tag-back">trás</span></h3>
 
           <div class="field">
@@ -76,6 +78,17 @@
             </div>
           </div>
 
+          <div class="field row">
+            <div>
+              <label class="field-label" for="A-w">Largura</label>
+              <input id="A-w" type="number" data-target="A" data-prop="w" min="1" max="40" step="1">
+            </div>
+            <div>
+              <label class="field-label" for="A-h">Altura</label>
+              <input id="A-h" type="number" data-target="A" data-prop="h" min="1" max="40" step="1">
+            </div>
+          </div>
+
           <div class="field">
             <label class="field-label">Cor</label>
             <div class="swatches" data-target="A" data-prop="color"></div>
@@ -83,7 +96,7 @@
           </div>
         </div>
 
-        <div class="group">
+        <div class="group" data-card-group="B">
           <h3 class="group-title">Cartão B <span class="tag tag-front">frente</span></h3>
 
           <div class="field">
@@ -103,6 +116,17 @@
             <div>
               <label class="field-label" for="B-row">Linha</label>
               <input id="B-row" type="number" data-target="B" data-prop="row" min="0" max="200" step="1">
+            </div>
+          </div>
+
+          <div class="field row">
+            <div>
+              <label class="field-label" for="B-w">Largura</label>
+              <input id="B-w" type="number" data-target="B" data-prop="w" min="1" max="40" step="1">
+            </div>
+            <div>
+              <label class="field-label" for="B-h">Altura</label>
+              <input id="B-h" type="number" data-target="B" data-prop="h" min="1" max="40" step="1">
             </div>
           </div>
 
@@ -152,6 +176,24 @@
               <span class="value" id="val-cell">40px</span>
             </label>
             <input id="inp-cell" type="range" min="20" max="80" step="2">
+          </div>
+        </div>
+
+        <div class="group">
+          <h3 class="group-title">Cenário</h3>
+
+          <div class="field">
+            <label class="field-label">Cor de fundo</label>
+            <div class="swatches" data-target="bg" data-prop="color"></div>
+            <input class="color-custom" type="color" data-target="bg" data-prop="color">
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="inp-grid-op">
+              <span>Intensidade do grid</span>
+              <span class="value" id="val-grid-op">18%</span>
+            </label>
+            <input id="inp-grid-op" type="range" min="0" max="60" step="1">
           </div>
 
           <label class="check">

@@ -1,5 +1,5 @@
-// iFood Benefícios — Cards Lab
-// 2 cartões em grid, com extrusão 3D sólida (convex hull) entre eles.
+// Cards Lab — iFood Benefícios
+// 2 cartões em grid, extrusão 3D sólida (convex hull), drag + resize.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const VIEW_W = 1000;
@@ -16,21 +16,24 @@ const PALETTE = [
   { name: 'Branco',     hex: '#ffffff' },
 ];
 
-// tamanho em células (w × h). Proporção tipo cartão.
 const SIZES = {
   S: { w: 4,  h: 3 },
   M: { w: 7,  h: 4 },
   L: { w: 10, h: 6 },
 };
 
-const state = {
+const DEFAULTS = {
   cell: 40,
   radius: 18,
   showGrid: true,
-  A: { size: 'M', col: 9,  row: 3, color: '#8e3b47' },
-  B: { size: 'S', col: 3,  row: 9, color: '#6cb4b0' },
+  gridOpacity: 18,
+  bgColor: '#f7f0e6',
+  A: { size: 'M', w: 7, h: 4, col: 9, row: 3, color: '#8e3b47' },
+  B: { size: 'S', w: 4, h: 3, col: 3, row: 9, color: '#6cb4b0' },
   shadow: { mode: 'auto', color: '#5a2630', darken: 35 },
 };
+
+const state = JSON.parse(JSON.stringify(DEFAULTS));
 
 // ────────────────────────────── color helpers
 
@@ -61,12 +64,11 @@ function darken(hex, percent) {
 // ────────────────────────────── geometry
 
 function cardRect(card) {
-  const s = SIZES[card.size];
   return {
     x: card.col * state.cell,
     y: card.row * state.cell,
-    w: s.w * state.cell,
-    h: s.h * state.cell,
+    w: card.w   * state.cell,
+    h: card.h   * state.cell,
   };
 }
 
@@ -108,14 +110,16 @@ function convexHull(points) {
 
 // ────────────────────────────── DOM refs
 
-const stage   = document.getElementById('stage');
-const gridBg  = document.getElementById('grid-bg');
-const layerS  = document.getElementById('layer-shadow');
-const layerA  = document.getElementById('layer-back');
-const layerB  = document.getElementById('layer-front');
-const gridPat = document.getElementById('grid-pattern');
-const metaGrid  = document.getElementById('meta-grid');
-const metaCards = document.getElementById('meta-cards');
+const stage       = document.getElementById('stage');
+const canvasBg    = document.getElementById('canvas-bg');
+const gridBg      = document.getElementById('grid-bg');
+const layerS      = document.getElementById('layer-shadow');
+const layerA      = document.getElementById('layer-back');
+const layerB      = document.getElementById('layer-front');
+const layerH      = document.getElementById('layer-handles');
+const gridPat     = document.getElementById('grid-pattern');
+const metaGrid    = document.getElementById('meta-grid');
+const metaCards   = document.getElementById('meta-cards');
 
 // ────────────────────────────── render
 
@@ -130,20 +134,22 @@ function el(tag, attrs) {
 }
 
 function render() {
-  // grid
+  // background
+  canvasBg.setAttribute('fill', state.bgColor);
+
+  // grid pattern
   gridPat.setAttribute('width',  state.cell);
   gridPat.setAttribute('height', state.cell);
-  gridPat.firstElementChild.setAttribute(
-    'd',
-    `M ${state.cell} 0 L 0 0 0 ${state.cell}`
-  );
+  const gridPath = gridPat.firstElementChild;
+  gridPath.setAttribute('d', `M ${state.cell} 0 L 0 0 0 ${state.cell}`);
+  gridPath.setAttribute('stroke', `rgba(63, 62, 62, ${state.gridOpacity / 100})`);
   gridBg.setAttribute('fill', state.showGrid ? 'url(#grid-pattern)' : 'transparent');
 
   // rects
   const rA = cardRect(state.A);
   const rB = cardRect(state.B);
 
-  // extrusion = convex hull of all 8 corners
+  // extrusion hull
   const hull = convexHull(rectCorners(rA).concat(rectCorners(rB)));
   const hullPts = hull.map(p => `${p.x},${p.y}`).join(' ');
 
@@ -151,32 +157,50 @@ function render() {
     ? darken(state.B.color, state.shadow.darken)
     : state.shadow.color;
 
-  clear(layerS); clear(layerA); clear(layerB);
+  clear(layerS); clear(layerA); clear(layerB); clear(layerH);
 
   layerS.appendChild(el('polygon', {
     points: hullPts,
     fill: shadowColor,
   }));
 
-  layerA.appendChild(el('rect', {
+  const aAttrs = {
     x: rA.x, y: rA.y, width: rA.w, height: rA.h,
     rx: state.radius, ry: state.radius,
     fill: state.A.color,
     'data-card': 'A',
-  }));
+  };
+  if (drag && drag.card === 'A' && drag.moved) aAttrs['class'] = 'is-active-card';
+  layerA.appendChild(el('rect', aAttrs));
 
-  layerB.appendChild(el('rect', {
+  const bAttrs = {
     x: rB.x, y: rB.y, width: rB.w, height: rB.h,
     rx: state.radius, ry: state.radius,
     fill: state.B.color,
     'data-card': 'B',
-  }));
+  };
+  if (drag && drag.card === 'B' && drag.moved) bAttrs['class'] = 'is-active-card';
+  layerB.appendChild(el('rect', bAttrs));
+
+  // resize handles
+  for (const [card, r] of [['A', rA], ['B', rB]]) {
+    layerH.appendChild(el('circle', {
+      cx: r.x + r.w,
+      cy: r.y + r.h,
+      r: 9,
+      fill: '#fff',
+      stroke: '#3f3e3e',
+      'stroke-width': 2,
+      'data-card': card,
+      'data-handle': 'resize',
+    }));
+  }
 
   // meta
   const cols = Math.floor(VIEW_W / state.cell);
   const rows = Math.floor(VIEW_H / state.cell);
   metaGrid.textContent  = `Grid ${cols}×${rows} · célula ${state.cell}px`;
-  metaCards.textContent = `A ${SIZES[state.A.size].w}×${SIZES[state.A.size].h} · B ${SIZES[state.B.size].w}×${SIZES[state.B.size].h}`;
+  metaCards.textContent = `A ${state.A.w}×${state.A.h} · B ${state.B.w}×${state.B.h}`;
 }
 
 // ────────────────────────────── controls
@@ -196,7 +220,7 @@ function buildSwatches(container, target, prop) {
 
 function syncSwatches(container, value) {
   for (const s of container.querySelectorAll('.swatch')) {
-    s.classList.toggle('active', s.dataset.value.toLowerCase() === value.toLowerCase());
+    s.classList.toggle('active', s.dataset.value.toLowerCase() === String(value).toLowerCase());
   }
 }
 
@@ -206,13 +230,34 @@ function syncSegmented(container, value) {
   }
 }
 
+function readStateProp(target, prop) {
+  if (target === 'shadow') return state.shadow[prop];
+  if (target === 'bg')     return state.bgColor;
+  return state[target][prop];
+}
+
 function setProp(target, prop, value) {
   if (target === 'shadow') {
     if (prop === 'mode')  state.shadow.mode  = value;
     if (prop === 'color') state.shadow.color = value;
+  } else if (target === 'bg') {
+    if (prop === 'color') state.bgColor = value;
   } else {
-    if (prop === 'col' || prop === 'row') value = clampInt(value, 0, 200);
-    state[target][prop] = value;
+    if (prop === 'size') {
+      const s = SIZES[value];
+      if (s) {
+        state[target].size = value;
+        state[target].w = s.w;
+        state[target].h = s.h;
+      }
+    } else if (prop === 'col' || prop === 'row') {
+      state[target][prop] = clampInt(value, 0, 200);
+    } else if (prop === 'w' || prop === 'h') {
+      state[target][prop] = clampInt(value, 1, 40);
+      state[target].size = 'custom';
+    } else {
+      state[target][prop] = value;
+    }
   }
   syncUI();
   render();
@@ -225,63 +270,57 @@ function clampInt(v, lo, hi) {
 }
 
 function syncUI() {
-  // segmented (size & shadow mode)
   document.querySelectorAll('.segmented').forEach(seg => {
     const t = seg.dataset.target;
     const p = seg.dataset.prop;
-    const v = t === 'shadow' ? state.shadow[p] : state[t][p];
-    syncSegmented(seg, v);
+    syncSegmented(seg, readStateProp(t, p));
   });
 
-  // swatches
   document.querySelectorAll('.swatches').forEach(sw => {
     const t = sw.dataset.target;
     const p = sw.dataset.prop;
-    const v = t === 'shadow' ? state.shadow[p] : state[t][p];
-    syncSwatches(sw, v);
+    syncSwatches(sw, readStateProp(t, p));
   });
 
-  // color custom inputs
   document.querySelectorAll('.color-custom').forEach(inp => {
-    const t = inp.dataset.target;
-    const p = inp.dataset.prop;
-    const v = t === 'shadow' ? state.shadow[p] : state[t][p];
-    inp.value = v;
+    inp.value = readStateProp(inp.dataset.target, inp.dataset.prop);
   });
 
-  // number inputs
-  document.getElementById('A-col').value = state.A.col;
-  document.getElementById('A-row').value = state.A.row;
-  document.getElementById('B-col').value = state.B.col;
-  document.getElementById('B-row').value = state.B.row;
+  // number inputs (col/row/w/h)
+  ['A-col', 'A-row', 'A-w', 'A-h', 'B-col', 'B-row', 'B-w', 'B-h'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) inp.value = readStateProp(inp.dataset.target, inp.dataset.prop);
+  });
 
   // ranges
-  document.getElementById('inp-darken').value = state.shadow.darken;
-  document.getElementById('val-darken').textContent = state.shadow.darken + '%';
-  document.getElementById('inp-radius').value = state.radius;
-  document.getElementById('val-radius').textContent = state.radius + 'px';
-  document.getElementById('inp-cell').value = state.cell;
-  document.getElementById('val-cell').textContent = state.cell + 'px';
+  setVal('inp-darken',  'val-darken',  state.shadow.darken,  '%');
+  setVal('inp-radius',  'val-radius',  state.radius,         'px');
+  setVal('inp-cell',    'val-cell',    state.cell,           'px');
+  setVal('inp-grid-op', 'val-grid-op', state.gridOpacity,    '%');
 
-  // checkbox
   document.getElementById('inp-grid').checked = state.showGrid;
 
-  // hide custom shadow swatches when in auto mode
-  const shadowGroup = document.querySelector('.segmented[data-target="shadow"]').closest('.field');
+  // shadow swatches visible only in custom mode
+  const shadowGroup    = document.querySelector('.segmented[data-target="shadow"]').closest('.field');
   const shadowSwatches = shadowGroup.querySelector('.swatches');
-  const shadowCustom = shadowGroup.querySelector('.color-custom');
+  const shadowCustom   = shadowGroup.querySelector('.color-custom');
   const showCustom = state.shadow.mode === 'custom';
   shadowSwatches.style.display = showCustom ? '' : 'none';
-  shadowCustom.style.display = showCustom ? '' : 'none';
+  shadowCustom.style.display   = showCustom ? '' : 'none';
+}
+
+function setVal(inputId, valueId, value, suffix) {
+  const inp = document.getElementById(inputId);
+  if (inp) inp.value = value;
+  const v = document.getElementById(valueId);
+  if (v) v.textContent = value + suffix;
 }
 
 function bindControls() {
-  // build palette swatches
   document.querySelectorAll('.swatches').forEach(c => {
     buildSwatches(c, c.dataset.target, c.dataset.prop);
   });
 
-  // segmented buttons
   document.querySelectorAll('.segmented').forEach(seg => {
     seg.addEventListener('click', e => {
       const btn = e.target.closest('button');
@@ -290,18 +329,16 @@ function bindControls() {
     });
   });
 
-  // color custom
   document.querySelectorAll('.color-custom').forEach(inp => {
     inp.addEventListener('input', () => setProp(inp.dataset.target, inp.dataset.prop, inp.value));
   });
 
-  // number inputs (col/row)
-  ['A-col', 'A-row', 'B-col', 'B-row'].forEach(id => {
+  ['A-col', 'A-row', 'A-w', 'A-h', 'B-col', 'B-row', 'B-w', 'B-h'].forEach(id => {
     const inp = document.getElementById(id);
+    if (!inp) return;
     inp.addEventListener('input', () => setProp(inp.dataset.target, inp.dataset.prop, inp.value));
   });
 
-  // ranges
   document.getElementById('inp-darken').addEventListener('input', e => {
     state.shadow.darken = parseInt(e.target.value, 10);
     syncUI(); render();
@@ -314,33 +351,29 @@ function bindControls() {
     state.cell = parseInt(e.target.value, 10);
     syncUI(); render();
   });
-
-  // checkbox
+  document.getElementById('inp-grid-op').addEventListener('input', e => {
+    state.gridOpacity = parseInt(e.target.value, 10);
+    syncUI(); render();
+  });
   document.getElementById('inp-grid').addEventListener('change', e => {
     state.showGrid = e.target.checked;
     render();
   });
 
-  // reset
   document.getElementById('btn-reset').addEventListener('click', () => {
-    Object.assign(state, {
-      cell: 40, radius: 18, showGrid: true,
-      A: { size: 'M', col: 9,  row: 3, color: '#8e3b47' },
-      B: { size: 'S', col: 3,  row: 9, color: '#6cb4b0' },
-      shadow: { mode: 'auto', color: '#5a2630', darken: 35 },
-    });
+    Object.assign(state, JSON.parse(JSON.stringify(DEFAULTS)));
     syncUI();
     render();
   });
 
-  // export svg
   document.getElementById('btn-export').addEventListener('click', exportSvg);
 }
 
 function exportSvg() {
-  // serialize without grid pattern noise — clone, hide grid
   const clone = stage.cloneNode(true);
   clone.querySelector('#grid-bg').setAttribute('fill', 'transparent');
+  const handles = clone.querySelector('#layer-handles');
+  if (handles) handles.remove();
   const xml = new XMLSerializer().serializeToString(clone);
   const blob = new Blob(
     ['<?xml version="1.0" encoding="UTF-8"?>\n', xml],
@@ -349,16 +382,17 @@ function exportSvg() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ifood-beneficios-cards-${Date.now()}.svg`;
+  a.download = `cards-lab-${Date.now()}.svg`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// ────────────────────────────── drag-on-grid
+// ────────────────────────────── drag (move + resize) + tap
 
 let drag = null;
+const TAP_THRESHOLD_PX = 6;
 
 function pointerToCell(evt) {
   const pt = stage.createSVGPoint();
@@ -371,30 +405,53 @@ function pointerToCell(evt) {
 }
 
 stage.addEventListener('pointerdown', evt => {
-  const card = evt.target && evt.target.dataset && evt.target.dataset.card;
-  if (!card) return;
+  const ds = evt.target && evt.target.dataset;
+  if (!ds || !ds.card) return;
   evt.preventDefault();
   stage.setPointerCapture(evt.pointerId);
   stage.classList.add('is-dragging');
-  const { col, row } = pointerToCell(evt);
+  const start = pointerToCell(evt);
   drag = {
-    card,
+    card: ds.card,
+    handle: ds.handle || 'move',
     pointerId: evt.pointerId,
-    offsetCol: col - state[card].col,
-    offsetRow: row - state[card].row,
+    startX: evt.clientX,
+    startY: evt.clientY,
+    moved: false,
+    offsetCol: start.col - state[ds.card].col,
+    offsetRow: start.row - state[ds.card].row,
   };
 });
 
 stage.addEventListener('pointermove', evt => {
   if (!drag || evt.pointerId !== drag.pointerId) return;
+  const dx = evt.clientX - drag.startX;
+  const dy = evt.clientY - drag.startY;
+  if (!drag.moved && Math.hypot(dx, dy) > TAP_THRESHOLD_PX) drag.moved = true;
+  if (!drag.moved) return;
+
   const { col, row } = pointerToCell(evt);
-  const newCol = clampInt(Math.round(col - drag.offsetCol), 0, 200);
-  const newRow = clampInt(Math.round(row - drag.offsetRow), 0, 200);
-  if (newCol !== state[drag.card].col || newRow !== state[drag.card].row) {
-    state[drag.card].col = newCol;
-    state[drag.card].row = newRow;
-    syncUI();
-    render();
+  const c = state[drag.card];
+
+  if (drag.handle === 'resize') {
+    const newW = Math.max(1, Math.min(40, Math.round(col - c.col)));
+    const newH = Math.max(1, Math.min(40, Math.round(row - c.row)));
+    if (newW !== c.w || newH !== c.h) {
+      c.w = newW;
+      c.h = newH;
+      c.size = 'custom';
+      syncUI();
+      render();
+    }
+  } else {
+    const newCol = clampInt(Math.round(col - drag.offsetCol), 0, 200);
+    const newRow = clampInt(Math.round(row - drag.offsetRow), 0, 200);
+    if (newCol !== c.col || newRow !== c.row) {
+      c.col = newCol;
+      c.row = newRow;
+      syncUI();
+      render();
+    }
   }
 });
 
@@ -402,15 +459,53 @@ function endDrag(evt) {
   if (!drag) return;
   if (evt && evt.pointerId !== drag.pointerId) return;
   try { stage.releasePointerCapture(drag.pointerId); } catch (e) {}
-  stage.classList.remove('is-dragging');
+  const wasTap = !drag.moved && drag.handle === 'move';
+  const tappedCard = drag.card;
   drag = null;
+  stage.classList.remove('is-dragging');
+  if (wasTap) selectCard(tappedCard);
+  render();
 }
 
 stage.addEventListener('pointerup',     endDrag);
 stage.addEventListener('pointercancel', endDrag);
 
-// ────────────────────────────── boot
+function selectCard(card) {
+  const group = document.querySelector(`.group[data-card-group="${card}"]`);
+  if (!group) return;
+  group.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  group.classList.add('is-flashed');
+  setTimeout(() => group.classList.remove('is-flashed'), 900);
+}
+
+// ────────────────────────────── brand title letter split + boot anim
+
+function splitTitle() {
+  const titleEl = document.querySelector('.brand-title');
+  if (!titleEl) return;
+  const text = titleEl.dataset.text || titleEl.textContent;
+  titleEl.textContent = '';
+  const chars = [...text];
+  chars.forEach((c, i) => {
+    const s = document.createElement('span');
+    s.className = 'ch' + (c === ' ' ? ' space' : '');
+    s.style.setProperty('--i', i);
+    s.textContent = c === ' ' ? '' : c;
+    s.setAttribute('aria-hidden', 'true');
+    titleEl.appendChild(s);
+  });
+  titleEl.setAttribute('aria-label', text);
+}
+
+function boot() {
+  document.body.classList.add('is-booting');
+  setTimeout(() => document.body.classList.remove('is-booting'), 1500);
+}
+
+// ────────────────────────────── go
 
 bindControls();
+splitTitle();
 syncUI();
 render();
+boot();
