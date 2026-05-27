@@ -6,14 +6,14 @@ const VIEW_W = 1000;
 const VIEW_H = 700;
 
 const PALETTE = [
-  { name: 'Vermelho', hex: '#ea1d2c' },
-  { name: 'Laranja',  hex: '#ff8e0d' },
-  { name: 'Amarelo',  hex: '#ffc247' },
-  { name: 'Verde',    hex: '#50a773' },
-  { name: 'Teal',     hex: '#0da192' },
-  { name: 'Carbono',  hex: '#3f3e3e' },
-  { name: 'Cream',    hex: '#fff4ea' },
-  { name: 'Branco',   hex: '#ffffff' },
+  { name: 'Marsala',    hex: '#8e3b47' },
+  { name: 'Azul Água',  hex: '#6cb4b0' },
+  { name: 'Off-white',  hex: '#f7f0e6' },
+  { name: 'Cream',      hex: '#fff4ea' },
+  { name: 'Vermelho',   hex: '#ea1d2c' },
+  { name: 'Amarelo',    hex: '#ffc247' },
+  { name: 'Carbono',    hex: '#3f3e3e' },
+  { name: 'Branco',     hex: '#ffffff' },
 ];
 
 // tamanho em células (w × h). Proporção tipo cartão.
@@ -27,9 +27,9 @@ const state = {
   cell: 40,
   radius: 18,
   showGrid: true,
-  A: { size: 'M', col: 9,  row: 3, color: '#ffc247' },
-  B: { size: 'S', col: 3,  row: 9, color: '#ea1d2c' },
-  shadow: { mode: 'auto', color: '#b21220', darken: 35 },
+  A: { size: 'M', col: 9,  row: 3, color: '#8e3b47' },
+  B: { size: 'S', col: 3,  row: 9, color: '#6cb4b0' },
+  shadow: { mode: 'auto', color: '#5a2630', darken: 35 },
 };
 
 // ────────────────────────────── color helpers
@@ -162,12 +162,14 @@ function render() {
     x: rA.x, y: rA.y, width: rA.w, height: rA.h,
     rx: state.radius, ry: state.radius,
     fill: state.A.color,
+    'data-card': 'A',
   }));
 
   layerB.appendChild(el('rect', {
     x: rB.x, y: rB.y, width: rB.w, height: rB.h,
     rx: state.radius, ry: state.radius,
     fill: state.B.color,
+    'data-card': 'B',
   }));
 
   // meta
@@ -323,9 +325,9 @@ function bindControls() {
   document.getElementById('btn-reset').addEventListener('click', () => {
     Object.assign(state, {
       cell: 40, radius: 18, showGrid: true,
-      A: { size: 'M', col: 9,  row: 3, color: '#ffc247' },
-      B: { size: 'S', col: 3,  row: 9, color: '#ea1d2c' },
-      shadow: { mode: 'auto', color: '#b21220', darken: 35 },
+      A: { size: 'M', col: 9,  row: 3, color: '#8e3b47' },
+      B: { size: 'S', col: 3,  row: 9, color: '#6cb4b0' },
+      shadow: { mode: 'auto', color: '#5a2630', darken: 35 },
     });
     syncUI();
     render();
@@ -353,6 +355,59 @@ function exportSvg() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ────────────────────────────── drag-on-grid
+
+let drag = null;
+
+function pointerToCell(evt) {
+  const pt = stage.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  const ctm = stage.getScreenCTM();
+  if (!ctm) return { col: 0, row: 0 };
+  const sp = pt.matrixTransform(ctm.inverse());
+  return { col: sp.x / state.cell, row: sp.y / state.cell };
+}
+
+stage.addEventListener('pointerdown', evt => {
+  const card = evt.target && evt.target.dataset && evt.target.dataset.card;
+  if (!card) return;
+  evt.preventDefault();
+  stage.setPointerCapture(evt.pointerId);
+  stage.classList.add('is-dragging');
+  const { col, row } = pointerToCell(evt);
+  drag = {
+    card,
+    pointerId: evt.pointerId,
+    offsetCol: col - state[card].col,
+    offsetRow: row - state[card].row,
+  };
+});
+
+stage.addEventListener('pointermove', evt => {
+  if (!drag || evt.pointerId !== drag.pointerId) return;
+  const { col, row } = pointerToCell(evt);
+  const newCol = clampInt(Math.round(col - drag.offsetCol), 0, 200);
+  const newRow = clampInt(Math.round(row - drag.offsetRow), 0, 200);
+  if (newCol !== state[drag.card].col || newRow !== state[drag.card].row) {
+    state[drag.card].col = newCol;
+    state[drag.card].row = newRow;
+    syncUI();
+    render();
+  }
+});
+
+function endDrag(evt) {
+  if (!drag) return;
+  if (evt && evt.pointerId !== drag.pointerId) return;
+  try { stage.releasePointerCapture(drag.pointerId); } catch (e) {}
+  stage.classList.remove('is-dragging');
+  drag = null;
+}
+
+stage.addEventListener('pointerup',     endDrag);
+stage.addEventListener('pointercancel', endDrag);
 
 // ────────────────────────────── boot
 
