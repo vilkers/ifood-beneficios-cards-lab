@@ -11,32 +11,34 @@ const ASPECTS = {
   '1:1':  { w: 1000, h: 1000 },
 };
 
+// Disposição: cada COLUNA é uma família (Wine | Rosa | Mint | Teal),
+// cada LINHA vai do tom mais claro pro mais escuro. Última linha é neutros.
 const PALETTE = [
-  // Wine / Marsala (linha 1)
+  // L1 — lights
   { name: 'Wine',           hex: '#a21449' },
-  { name: 'Marsala',        hex: '#6e0530' },
-  { name: 'Wine Deep',      hex: '#3d0218' },
-  { name: 'Vinho',          hex: '#1f000b' },
-  // Rosa (linha 2)
   { name: 'Rosa Pálido',    hex: '#f4bfd8' },
-  { name: 'Rosa',           hex: '#efa1c5' },
-  { name: 'Rosa Vivo',      hex: '#ea5fa1' },
-  { name: 'Magenta',        hex: '#d81e7b' },
-  // Menta (linha 3)
   { name: 'Mint Pálido',    hex: '#cff0dd' },
-  { name: 'Mint Claro',     hex: '#b5ebc8' },
-  { name: 'Menta',          hex: '#88e0b8' },
-  { name: 'Mint Médio',     hex: '#5dbe96' },
-  // Teal (linha 4)
   { name: 'Teal',           hex: '#4a8b76' },
+  // L2
+  { name: 'Marsala',        hex: '#6e0530' },
+  { name: 'Rosa',           hex: '#efa1c5' },
+  { name: 'Mint Claro',     hex: '#b5ebc8' },
   { name: 'Teal Médio',     hex: '#2d6655' },
+  // L3
+  { name: 'Wine Deep',      hex: '#3d0218' },
+  { name: 'Rosa Vivo',      hex: '#ea5fa1' },
+  { name: 'Menta',          hex: '#88e0b8' },
   { name: 'Teal Deep',      hex: '#1b413d' },
+  // L4 — darkest
+  { name: 'Vinho',          hex: '#1f000b' },
+  { name: 'Magenta',        hex: '#d81e7b' },
+  { name: 'Mint Médio',     hex: '#5dbe96' },
   { name: 'Teal Escuro',    hex: '#0e2a28' },
-  // Neutros (linha 5)
+  // L5 — neutros
   { name: 'Off-white',      hex: '#f7f0e6' },
-  { name: 'Vermelho iFood', hex: '#ea1d2c' },
-  { name: 'Carbono',        hex: '#3f3e3e' },
   { name: 'Branco',         hex: '#ffffff' },
+  { name: 'Carbono',        hex: '#3f3e3e' },
+  { name: 'Vermelho iFood', hex: '#ea1d2c' },
 ];
 
 const SIZES = {
