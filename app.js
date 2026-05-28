@@ -12,21 +12,31 @@ const ASPECTS = {
 };
 
 const PALETTE = [
-  // claros
-  { name: 'Off-white',      hex: '#f7f0e6' },
-  { name: 'Cream',          hex: '#fff4ea' },
-  { name: 'Rosa Pálido',    hex: '#f8c6dc' },
-  { name: 'Verde Pálido',   hex: '#d8f2e5' },
-  // médios
-  { name: 'Rosa',           hex: '#f291bc' },
-  { name: 'Menta',          hex: '#88e0b8' },
-  { name: 'Magenta',        hex: '#c00755' },
-  { name: 'Verde Mar',      hex: '#4d9f7d' },
-  // escuros
+  // Wine / Marsala (linha 1)
+  { name: 'Wine',           hex: '#a21449' },
   { name: 'Marsala',        hex: '#6e0530' },
-  { name: 'Vinho',          hex: '#2d0010' },
-  { name: 'Verde Profundo', hex: '#1f4d40' },
+  { name: 'Wine Deep',      hex: '#3d0218' },
+  { name: 'Vinho',          hex: '#1f000b' },
+  // Rosa (linha 2)
+  { name: 'Rosa Pálido',    hex: '#f4bfd8' },
+  { name: 'Rosa',           hex: '#efa1c5' },
+  { name: 'Rosa Vivo',      hex: '#ea5fa1' },
+  { name: 'Magenta',        hex: '#d81e7b' },
+  // Menta (linha 3)
+  { name: 'Mint Pálido',    hex: '#cff0dd' },
+  { name: 'Mint Claro',     hex: '#b5ebc8' },
+  { name: 'Menta',          hex: '#88e0b8' },
+  { name: 'Mint Médio',     hex: '#5dbe96' },
+  // Teal (linha 4)
+  { name: 'Teal',           hex: '#4a8b76' },
+  { name: 'Teal Médio',     hex: '#2d6655' },
+  { name: 'Teal Deep',      hex: '#1b413d' },
+  { name: 'Teal Escuro',    hex: '#0e2a28' },
+  // Neutros (linha 5)
+  { name: 'Off-white',      hex: '#f7f0e6' },
   { name: 'Vermelho iFood', hex: '#ea1d2c' },
+  { name: 'Carbono',        hex: '#3f3e3e' },
+  { name: 'Branco',         hex: '#ffffff' },
 ];
 
 const SIZES = {
@@ -42,10 +52,10 @@ const DEFAULTS = {
   showGrid: true,
   gridOpacity: 18,
   bgColor: '#f7f0e6',
-  outline: { on: false, color: '#2d0010', width: 2 },
+  outline: { on: false, color: '#1f000b', width: 2 },
   A: { size: 'M', w: 7, h: 4, col: 4,  row: 4,  color: '#6e0530' },
   B: { size: 'S', w: 4, h: 3, col: 10, row: 10, color: '#88e0b8' },
-  shadow: { mode: 'auto', color: '#2d0010', darken: 35 },
+  shadow: { mode: 'auto', color: '#1f000b', darken: 35 },
   texts: [],
   images: [], // session-only; not serialized to URL
 };
@@ -499,7 +509,7 @@ function addText() {
     col: Math.max(0, Math.floor(v.w / state.cell / 2) - 4),
     row: Math.max(0, Math.floor(v.h / state.cell / 2)),
     fontSize: 48,
-    color: '#2d0010',
+    color: '#1f000b',
   });
   rebuildTextList();
   render();
