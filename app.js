@@ -1,9 +1,15 @@
 // Cards Lab — iFood Benefícios
-// 2 cartões em grid, extrusão 3D sólida (convex hull), drag + resize.
+// Cards + texts + images on a grid; drag, resize, outline; export SVG/PNG; shareable URL.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const VIEW_W = 1000;
-const VIEW_H = 700;
+const XLINK  = 'http://www.w3.org/1999/xlink';
+
+const ASPECTS = {
+  '16:9': { w: 1280, h: 720  },
+  '9:16': { w: 720,  h: 1280 },
+  '4:5':  { w: 800,  h: 1000 },
+  '1:1':  { w: 1000, h: 1000 },
+};
 
 const PALETTE = [
   // claros
@@ -30,42 +36,40 @@ const SIZES = {
 };
 
 const DEFAULTS = {
+  aspect: '16:9',
   cell: 40,
   radius: 18,
   showGrid: true,
   gridOpacity: 18,
   bgColor: '#f7f0e6',
-  A: { size: 'M', w: 7, h: 4, col: 9, row: 3, color: '#6e0530' },
-  B: { size: 'S', w: 4, h: 3, col: 3, row: 9, color: '#88e0b8' },
+  outline: { on: false, color: '#2d0010', width: 2 },
+  A: { size: 'M', w: 7, h: 4, col: 4,  row: 4,  color: '#6e0530' },
+  B: { size: 'S', w: 4, h: 3, col: 10, row: 10, color: '#88e0b8' },
   shadow: { mode: 'auto', color: '#2d0010', darken: 35 },
+  texts: [],
+  images: [], // session-only; not serialized to URL
 };
 
 const state = JSON.parse(JSON.stringify(DEFAULTS));
+
+function getView() { return ASPECTS[state.aspect] || ASPECTS['16:9']; }
 
 // ────────────────────────────── color helpers
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
-  const v = h.length === 3
-    ? h.split('').map(c => c + c).join('')
-    : h;
+  const v = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
   const n = parseInt(v, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
-
 function rgbToHex({ r, g, b }) {
   const to = v => v.toString(16).padStart(2, '0');
   return '#' + to(r) + to(g) + to(b);
 }
-
 function darken(hex, percent) {
   const { r, g, b } = hexToRgb(hex);
   const f = 1 - percent / 100;
-  return rgbToHex({
-    r: Math.round(r * f),
-    g: Math.round(g * f),
-    b: Math.round(b * f),
-  });
+  return rgbToHex({ r: Math.round(r * f), g: Math.round(g * f), b: Math.round(b * f) });
 }
 
 // ────────────────────────────── geometry
@@ -79,17 +83,12 @@ function cardRect(card) {
   };
 }
 
-// Sample the rounded-rect perimeter so the convex hull tracks the
-// curved corners. Each quarter-circle gets SEG+1 points.
 function sampleRoundedRect(rect, radius) {
   const { x, y, w, h } = rect;
   const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
   if (r <= 0) {
     return [
-      { x,         y },
-      { x: x + w,  y },
-      { x: x + w,  y: y + h },
-      { x,         y: y + h },
+      { x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h },
     ];
   }
   const SEG = 6;
@@ -103,76 +102,79 @@ function sampleRoundedRect(rect, radius) {
   for (const arc of arcs) {
     for (let i = 0; i <= SEG; i++) {
       const a = arc.a0 + (i / SEG) * (Math.PI / 2);
-      pts.push({
-        x: arc.cx + r * Math.cos(a),
-        y: arc.cy + r * Math.sin(a),
-      });
+      pts.push({ x: arc.cx + r * Math.cos(a), y: arc.cy + r * Math.sin(a) });
     }
   }
   return pts;
 }
 
-// Andrew's monotone chain convex hull.
 function convexHull(points) {
   const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
   if (pts.length <= 1) return pts;
-
   const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-
   const lower = [];
   for (const p of pts) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
-      lower.pop();
-    }
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
     lower.push(p);
   }
   const upper = [];
   for (let i = pts.length - 1; i >= 0; i--) {
     const p = pts[i];
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
-      upper.pop();
-    }
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
     upper.push(p);
   }
-  lower.pop();
-  upper.pop();
+  lower.pop(); upper.pop();
   return lower.concat(upper);
 }
 
 // ────────────────────────────── DOM refs
 
-const stage       = document.getElementById('stage');
-const canvasBg    = document.getElementById('canvas-bg');
-const gridBg      = document.getElementById('grid-bg');
-const layerS      = document.getElementById('layer-shadow');
-const layerA      = document.getElementById('layer-back');
-const layerB      = document.getElementById('layer-front');
-const layerH      = document.getElementById('layer-handles');
-const gridPat     = document.getElementById('grid-pattern');
-const metaGrid    = document.getElementById('meta-grid');
-const metaCards   = document.getElementById('meta-cards');
+const stage     = document.getElementById('stage');
+const frame     = document.getElementById('frame');
+const canvasBg  = document.getElementById('canvas-bg');
+const gridBg    = document.getElementById('grid-bg');
+const layerS    = document.getElementById('layer-shadow');
+const layerA    = document.getElementById('layer-back');
+const layerB    = document.getElementById('layer-front');
+const layerImg  = document.getElementById('layer-images');
+const layerTxt  = document.getElementById('layer-text');
+const layerH    = document.getElementById('layer-handles');
+const gridPat   = document.getElementById('grid-pattern');
+const metaGrid  = document.getElementById('meta-grid');
+const metaCards = document.getElementById('meta-cards');
 
 // ────────────────────────────── render
 
-function clear(node) {
-  while (node.firstChild) node.removeChild(node.firstChild);
-}
-
 function el(tag, attrs) {
   const n = document.createElementNS(SVG_NS, tag);
-  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  for (const k in attrs) {
+    if (attrs[k] != null) n.setAttribute(k, attrs[k]);
+  }
   return n;
+}
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+function applyAspect() {
+  const v = getView();
+  stage.setAttribute('viewBox', `0 0 ${v.w} ${v.h}`);
+  canvasBg.setAttribute('width',  v.w);
+  canvasBg.setAttribute('height', v.h);
+  gridBg.setAttribute('width',  v.w);
+  gridBg.setAttribute('height', v.h);
+  frame.style.aspectRatio = `${v.w} / ${v.h}`;
 }
 
 function render() {
+  const v = getView();
+
   // background
   canvasBg.setAttribute('fill', state.bgColor);
 
-  // grid pattern (rounded cells)
+  // grid: cell radius proportional to card radius
   const cell = state.cell;
   const pad = Math.max(2, Math.round(cell * 0.08));
   const inner = cell - pad * 2;
-  const cellR = Math.max(2, Math.round(cell * 0.18));
+  const cellR = Math.max(0, Math.min(Math.round(state.radius * 0.28), inner / 2));
   gridPat.setAttribute('width',  cell);
   gridPat.setAttribute('height', cell);
   const gridRect = gridPat.firstElementChild;
@@ -185,69 +187,143 @@ function render() {
   gridRect.setAttribute('stroke', `rgba(63, 62, 62, ${state.gridOpacity / 100})`);
   gridBg.setAttribute('fill', state.showGrid ? 'url(#grid-pattern)' : 'transparent');
 
-  // rects
+  // cards
   const rA = cardRect(state.A);
   const rB = cardRect(state.B);
 
-  // extrusion hull — sample rounded perimeter so the shadow tracks curves
-  const sampledA = sampleRoundedRect(rA, state.radius);
-  const sampledB = sampleRoundedRect(rB, state.radius);
-  const hull = convexHull(sampledA.concat(sampledB));
+  // extrusion
+  const hull = convexHull(
+    sampleRoundedRect(rA, state.radius).concat(sampleRoundedRect(rB, state.radius))
+  );
   const hullPts = hull.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 
   const shadowColor = state.shadow.mode === 'auto'
     ? darken(state.B.color, state.shadow.darken)
     : state.shadow.color;
 
-  clear(layerS); clear(layerA); clear(layerB); clear(layerH);
+  clear(layerS); clear(layerA); clear(layerB); clear(layerImg); clear(layerTxt); clear(layerH);
+
+  // outline attrs
+  const outlineOn = !!state.outline.on;
+  const outlineColor = state.outline.color;
+  const outlineWidth = state.outline.width;
 
   layerS.appendChild(el('polygon', {
     points: hullPts,
     fill: shadowColor,
+    stroke: outlineOn ? outlineColor : null,
+    'stroke-width': outlineOn ? outlineWidth : null,
+    'stroke-linejoin': outlineOn ? 'round' : null,
   }));
 
+  // card A
   const aAttrs = {
     x: rA.x, y: rA.y, width: rA.w, height: rA.h,
     rx: state.radius, ry: state.radius,
     fill: state.A.color,
     'data-card': 'A',
+    stroke: outlineOn ? outlineColor : null,
+    'stroke-width': outlineOn ? outlineWidth : null,
   };
-  if (drag && drag.card === 'A' && drag.moved) aAttrs['class'] = 'is-active-card';
+  if (drag && drag.kind === 'card' && drag.id === 'A' && drag.moved) aAttrs['class'] = 'is-active';
   layerA.appendChild(el('rect', aAttrs));
 
+  // card B
   const bAttrs = {
     x: rB.x, y: rB.y, width: rB.w, height: rB.h,
     rx: state.radius, ry: state.radius,
     fill: state.B.color,
     'data-card': 'B',
+    stroke: outlineOn ? outlineColor : null,
+    'stroke-width': outlineOn ? outlineWidth : null,
   };
-  if (drag && drag.card === 'B' && drag.moved) bAttrs['class'] = 'is-active-card';
+  if (drag && drag.kind === 'card' && drag.id === 'B' && drag.moved) bAttrs['class'] = 'is-active';
   layerB.appendChild(el('rect', bAttrs));
 
-  // resize handles
-  for (const [card, r] of [['A', rA], ['B', rB]]) {
+  // images
+  for (const im of state.images) {
+    const ix = im.col * cell;
+    const iy = im.row * cell;
+    const iw = im.w * cell;
+    const ih = im.h * cell;
+    const g = el('g', { 'data-image-id': im.id });
+    // SVG <image> with both href and xlink:href for max compat
+    const img = el('image', {
+      x: ix, y: iy, width: iw, height: ih,
+      href: im.dataUrl,
+      preserveAspectRatio: 'xMidYMid meet',
+      'data-image-id': im.id,
+    });
+    img.setAttributeNS(XLINK, 'href', im.dataUrl);
+    if (drag && drag.kind === 'image' && drag.id === im.id && drag.moved) {
+      img.setAttribute('class', 'is-active');
+    }
+    g.appendChild(img);
+    if (outlineOn) {
+      g.appendChild(el('rect', {
+        x: ix, y: iy, width: iw, height: ih,
+        rx: state.radius, ry: state.radius,
+        fill: 'none',
+        stroke: outlineColor,
+        'stroke-width': outlineWidth,
+        'pointer-events': 'none',
+      }));
+    }
+    layerImg.appendChild(g);
+  }
+
+  // texts
+  for (const t of state.texts) {
+    const tx = t.col * cell;
+    const ty = t.row * cell;
+    const tEl = el('text', {
+      x: tx, y: ty,
+      'dominant-baseline': 'hanging',
+      'font-family': 'iFood Titulos, sans-serif',
+      'font-weight': t.weight || 700,
+      'font-size': t.fontSize,
+      fill: t.color,
+      'data-text-id': t.id,
+    });
+    if (drag && drag.kind === 'text' && drag.id === t.id && drag.moved) {
+      tEl.setAttribute('class', 'is-active');
+    }
+    tEl.textContent = t.content;
+    layerTxt.appendChild(tEl);
+  }
+
+  // resize handles (cards + images)
+  for (const [id, r] of [['A', rA], ['B', rB]]) {
     layerH.appendChild(el('circle', {
-      cx: r.x + r.w,
-      cy: r.y + r.h,
-      r: 9,
-      fill: '#fff',
-      stroke: '#3f3e3e',
-      'stroke-width': 2,
-      'data-card': card,
-      'data-handle': 'resize',
+      cx: r.x + r.w, cy: r.y + r.h, r: 9,
+      fill: '#fff', stroke: '#3f3e3e', 'stroke-width': 2,
+      'data-card': id, 'data-handle': 'resize',
+    }));
+  }
+  for (const im of state.images) {
+    const ix = im.col * cell;
+    const iy = im.row * cell;
+    const iw = im.w * cell;
+    const ih = im.h * cell;
+    layerH.appendChild(el('circle', {
+      cx: ix + iw, cy: iy + ih, r: 9,
+      fill: '#fff', stroke: '#3f3e3e', 'stroke-width': 2,
+      'data-image-id': im.id, 'data-handle': 'resize',
     }));
   }
 
   // meta
-  const cols = Math.floor(VIEW_W / state.cell);
-  const rows = Math.floor(VIEW_H / state.cell);
-  metaGrid.textContent  = `Grid ${cols}×${rows} · célula ${state.cell}px`;
-  metaCards.textContent = `A ${state.A.w}×${state.A.h} · B ${state.B.w}×${state.B.h}`;
+  const cols = Math.floor(v.w / cell);
+  const rows = Math.floor(v.h / cell);
+  metaGrid.textContent  = `Grid ${cols}×${rows} · célula ${cell}px`;
+  metaCards.textContent = `A ${state.A.w}×${state.A.h} · B ${state.B.w}×${state.B.h}`
+    + (state.texts.length ? ` · ${state.texts.length} texto${state.texts.length>1?'s':''}` : '')
+    + (state.images.length ? ` · ${state.images.length} img` : '');
 
   pushHash();
 }
 
-// ────────────────────────────── controls
+// ────────────────────────────── controls (static)
 
 function buildSwatches(container, target, prop) {
   for (const c of PALETTE) {
@@ -275,18 +351,25 @@ function syncSegmented(container, value) {
 }
 
 function readStateProp(target, prop) {
-  if (target === 'shadow') return state.shadow[prop];
-  if (target === 'bg')     return state.bgColor;
-  return state[target][prop];
+  if (target === 'shadow')  return state.shadow[prop];
+  if (target === 'bg')      return state.bgColor;
+  if (target === 'outline') return state.outline[prop];
+  if (target === 'aspect')  return state.aspect;
+  return state[target] ? state[target][prop] : undefined;
 }
 
 function setProp(target, prop, value) {
   if (target === 'shadow') {
-    if (prop === 'mode')  state.shadow.mode  = value;
+    if (prop === 'mode')  state.shadow.mode = value;
     if (prop === 'color') state.shadow.color = value;
   } else if (target === 'bg') {
     if (prop === 'color') state.bgColor = value;
-  } else {
+  } else if (target === 'outline') {
+    if (prop === 'color') state.outline.color = value;
+  } else if (target === 'aspect') {
+    state.aspect = value;
+    applyAspect();
+  } else if (target === 'A' || target === 'B') {
     if (prop === 'size') {
       const s = SIZES[value];
       if (s) {
@@ -297,7 +380,7 @@ function setProp(target, prop, value) {
     } else if (prop === 'col' || prop === 'row') {
       state[target][prop] = clampInt(value, 0, 200);
     } else if (prop === 'w' || prop === 'h') {
-      state[target][prop] = clampInt(value, 1, 40);
+      state[target][prop] = clampInt(value, 1, 60);
       state[target].size = 'custom';
     } else {
       state[target][prop] = value;
@@ -313,46 +396,6 @@ function clampInt(v, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-function syncUI() {
-  document.querySelectorAll('.segmented').forEach(seg => {
-    const t = seg.dataset.target;
-    const p = seg.dataset.prop;
-    syncSegmented(seg, readStateProp(t, p));
-  });
-
-  document.querySelectorAll('.swatches').forEach(sw => {
-    const t = sw.dataset.target;
-    const p = sw.dataset.prop;
-    syncSwatches(sw, readStateProp(t, p));
-  });
-
-  document.querySelectorAll('.color-custom').forEach(inp => {
-    inp.value = readStateProp(inp.dataset.target, inp.dataset.prop);
-  });
-
-  // number inputs (col/row/w/h)
-  ['A-col', 'A-row', 'A-w', 'A-h', 'B-col', 'B-row', 'B-w', 'B-h'].forEach(id => {
-    const inp = document.getElementById(id);
-    if (inp) inp.value = readStateProp(inp.dataset.target, inp.dataset.prop);
-  });
-
-  // ranges
-  setVal('inp-darken',  'val-darken',  state.shadow.darken,  '%');
-  setVal('inp-radius',  'val-radius',  state.radius,         'px');
-  setVal('inp-cell',    'val-cell',    state.cell,           'px');
-  setVal('inp-grid-op', 'val-grid-op', state.gridOpacity,    '%');
-
-  document.getElementById('inp-grid').checked = state.showGrid;
-
-  // shadow swatches visible only in custom mode
-  const shadowGroup    = document.querySelector('.segmented[data-target="shadow"]').closest('.field');
-  const shadowSwatches = shadowGroup.querySelector('.swatches');
-  const shadowCustom   = shadowGroup.querySelector('.color-custom');
-  const showCustom = state.shadow.mode === 'custom';
-  shadowSwatches.style.display = showCustom ? '' : 'none';
-  shadowCustom.style.display   = showCustom ? '' : 'none';
-}
-
 function setVal(inputId, valueId, value, suffix) {
   const inp = document.getElementById(inputId);
   if (inp) inp.value = value;
@@ -360,8 +403,37 @@ function setVal(inputId, valueId, value, suffix) {
   if (v) v.textContent = value + suffix;
 }
 
+function syncUI() {
+  document.querySelectorAll('.segmented').forEach(seg => {
+    syncSegmented(seg, readStateProp(seg.dataset.target, seg.dataset.prop));
+  });
+
+  document.querySelectorAll('.panel-scroll .swatches[data-target]').forEach(sw => {
+    syncSwatches(sw, readStateProp(sw.dataset.target, sw.dataset.prop));
+  });
+
+  ['A-col','A-row','A-w','A-h','B-col','B-row','B-w','B-h'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) inp.value = readStateProp(inp.dataset.target, inp.dataset.prop);
+  });
+
+  setVal('inp-darken',     'val-darken',     state.shadow.darken,    '%');
+  setVal('inp-radius',     'val-radius',     state.radius,           'px');
+  setVal('inp-cell',       'val-cell',       state.cell,             'px');
+  setVal('inp-grid-op',    'val-grid-op',    state.gridOpacity,      '%');
+  setVal('inp-outline-w',  'val-outline-w',  state.outline.width,    'px');
+
+  document.getElementById('inp-grid').checked    = state.showGrid;
+  document.getElementById('inp-outline').checked = state.outline.on;
+
+  // shadow swatches visible only in custom mode
+  const shadowGroup = document.querySelector('.segmented[data-target="shadow"]').closest('.field');
+  const shadowSwatches = shadowGroup.querySelector('.swatches');
+  shadowSwatches.style.display = state.shadow.mode === 'custom' ? '' : 'none';
+}
+
 function bindControls() {
-  document.querySelectorAll('.swatches').forEach(c => {
+  document.querySelectorAll('.panel-scroll .swatches[data-target]').forEach(c => {
     buildSwatches(c, c.dataset.target, c.dataset.prop);
   });
 
@@ -373,75 +445,239 @@ function bindControls() {
     });
   });
 
-  document.querySelectorAll('.color-custom').forEach(inp => {
-    inp.addEventListener('input', () => setProp(inp.dataset.target, inp.dataset.prop, inp.value));
-  });
-
-  ['A-col', 'A-row', 'A-w', 'A-h', 'B-col', 'B-row', 'B-w', 'B-h'].forEach(id => {
+  ['A-col','A-row','A-w','A-h','B-col','B-row','B-w','B-h'].forEach(id => {
     const inp = document.getElementById(id);
     if (!inp) return;
     inp.addEventListener('input', () => setProp(inp.dataset.target, inp.dataset.prop, inp.value));
   });
 
-  document.getElementById('inp-darken').addEventListener('input', e => {
-    state.shadow.darken = parseInt(e.target.value, 10);
-    syncUI(); render();
+  const slide = (id, fn) => document.getElementById(id).addEventListener('input', e => {
+    fn(parseInt(e.target.value, 10)); syncUI(); render();
   });
-  document.getElementById('inp-radius').addEventListener('input', e => {
-    state.radius = parseInt(e.target.value, 10);
-    syncUI(); render();
-  });
-  document.getElementById('inp-cell').addEventListener('input', e => {
-    state.cell = parseInt(e.target.value, 10);
-    syncUI(); render();
-  });
-  document.getElementById('inp-grid-op').addEventListener('input', e => {
-    state.gridOpacity = parseInt(e.target.value, 10);
-    syncUI(); render();
-  });
+  slide('inp-darken',    v => state.shadow.darken    = v);
+  slide('inp-radius',    v => state.radius           = v);
+  slide('inp-cell',      v => state.cell             = v);
+  slide('inp-grid-op',   v => state.gridOpacity      = v);
+  slide('inp-outline-w', v => state.outline.width    = v);
+
   document.getElementById('inp-grid').addEventListener('change', e => {
-    state.showGrid = e.target.checked;
-    render();
+    state.showGrid = e.target.checked; render();
+  });
+  document.getElementById('inp-outline').addEventListener('change', e => {
+    state.outline.on = e.target.checked; render();
   });
 
   document.getElementById('btn-reset').addEventListener('click', () => {
     Object.assign(state, JSON.parse(JSON.stringify(DEFAULTS)));
-    syncUI();
-    render();
+    applyAspect();
+    syncUI(); rebuildTextList(); rebuildImageList(); render();
   });
 
   document.getElementById('btn-export-svg').addEventListener('click', exportSvg);
   document.getElementById('btn-export-png').addEventListener('click', exportPng);
   document.getElementById('btn-share').addEventListener('click', copyShareLink);
+
+  document.getElementById('btn-add-text').addEventListener('click', addText);
+  document.getElementById('btn-add-image').addEventListener('click', () => {
+    document.getElementById('inp-image').click();
+  });
+  document.getElementById('inp-image').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (file) loadImageFile(file);
+    e.target.value = '';
+  });
 }
+
+// ────────────────────────────── texts
+
+function addText() {
+  const v = getView();
+  const id = 't' + Date.now().toString(36);
+  state.texts.push({
+    id,
+    content: 'iFood Benefícios',
+    col: Math.max(0, Math.floor(v.w / state.cell / 2) - 4),
+    row: Math.max(0, Math.floor(v.h / state.cell / 2)),
+    fontSize: 48,
+    color: '#2d0010',
+  });
+  rebuildTextList();
+  render();
+}
+
+function deleteText(id) {
+  state.texts = state.texts.filter(t => t.id !== id);
+  rebuildTextList();
+  render();
+}
+
+function rebuildTextList() {
+  const list = document.getElementById('list-texts');
+  list.innerHTML = '';
+  state.texts.forEach((t, i) => {
+    const item = document.createElement('div');
+    item.className = 'sub-item';
+    item.dataset.id = t.id;
+
+    const head = document.createElement('div');
+    head.className = 'sub-header';
+    const title = document.createElement('span');
+    title.className = 'sub-title';
+    title.textContent = `Texto ${i + 1}`;
+    const del = document.createElement('button');
+    del.className = 'btn-icon'; del.type = 'button';
+    del.textContent = '×';
+    del.addEventListener('click', () => deleteText(t.id));
+    head.appendChild(title); head.appendChild(del);
+    item.appendChild(head);
+
+    const contentInput = document.createElement('input');
+    contentInput.type = 'text';
+    contentInput.className = 'text-input';
+    contentInput.value = t.content;
+    contentInput.placeholder = 'Texto';
+    contentInput.addEventListener('input', () => {
+      t.content = contentInput.value;
+      render();
+    });
+    item.appendChild(contentInput);
+
+    const sizeField = document.createElement('div');
+    sizeField.className = 'field';
+    const sizeLabel = document.createElement('label');
+    sizeLabel.className = 'field-label';
+    sizeLabel.innerHTML = `<span>Tamanho</span><span class="value">${t.fontSize}px</span>`;
+    const sizeRange = document.createElement('input');
+    sizeRange.type = 'range'; sizeRange.min = 12; sizeRange.max = 160; sizeRange.step = 1;
+    sizeRange.value = t.fontSize;
+    sizeRange.addEventListener('input', () => {
+      t.fontSize = parseInt(sizeRange.value, 10);
+      sizeLabel.querySelector('.value').textContent = t.fontSize + 'px';
+      render();
+    });
+    sizeField.appendChild(sizeLabel); sizeField.appendChild(sizeRange);
+    item.appendChild(sizeField);
+
+    const colorField = document.createElement('div');
+    colorField.className = 'field';
+    const colorLabel = document.createElement('label');
+    colorLabel.className = 'field-label';
+    colorLabel.textContent = 'Cor';
+    const swatches = document.createElement('div');
+    swatches.className = 'swatches';
+    PALETTE.forEach(c => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'swatch';
+      b.style.background = c.hex; b.dataset.value = c.hex; b.title = c.name;
+      if (c.hex.toLowerCase() === t.color.toLowerCase()) b.classList.add('active');
+      b.addEventListener('click', () => {
+        t.color = c.hex;
+        swatches.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        b.classList.add('active');
+        render();
+      });
+      swatches.appendChild(b);
+    });
+    colorField.appendChild(colorLabel); colorField.appendChild(swatches);
+    item.appendChild(colorField);
+
+    list.appendChild(item);
+  });
+}
+
+// ────────────────────────────── images
+
+function loadImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const probe = new Image();
+    probe.onload = () => {
+      const aspect = probe.naturalHeight / probe.naturalWidth;
+      const v = getView();
+      const targetCells = Math.min(8, Math.floor(v.w / state.cell / 2));
+      const wCells = targetCells;
+      const hCells = Math.max(1, Math.round(targetCells * aspect));
+      const id = 'i' + Date.now().toString(36);
+      state.images.push({
+        id, dataUrl,
+        col: Math.max(0, Math.floor(v.w / state.cell / 2 - wCells / 2)),
+        row: Math.max(0, Math.floor(v.h / state.cell / 2 - hCells / 2)),
+        w: wCells,
+        h: hCells,
+      });
+      rebuildImageList();
+      render();
+    };
+    probe.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function deleteImage(id) {
+  state.images = state.images.filter(i => i.id !== id);
+  rebuildImageList();
+  render();
+}
+
+function rebuildImageList() {
+  const list = document.getElementById('list-images');
+  list.innerHTML = '';
+  state.images.forEach((im, i) => {
+    const item = document.createElement('div');
+    item.className = 'sub-item';
+
+    const head = document.createElement('div');
+    head.className = 'sub-header';
+    const title = document.createElement('span');
+    title.className = 'sub-title';
+    title.textContent = `Imagem ${i + 1}`;
+    const del = document.createElement('button');
+    del.className = 'btn-icon'; del.type = 'button';
+    del.textContent = '×';
+    del.addEventListener('click', () => deleteImage(im.id));
+    head.appendChild(title); head.appendChild(del);
+    item.appendChild(head);
+
+    const thumb = document.createElement('img');
+    thumb.src = im.dataUrl;
+    thumb.className = 'img-thumb';
+    thumb.alt = '';
+    item.appendChild(thumb);
+
+    const hint = document.createElement('div');
+    hint.className = 'field-label';
+    hint.innerHTML = `<span>Arrasta no canvas • alça pra redimensionar</span>`;
+    item.appendChild(hint);
+
+    list.appendChild(item);
+  });
+}
+
+// ────────────────────────────── export
 
 function buildExportSvg() {
   const clone = stage.cloneNode(true);
   clone.querySelector('#grid-bg').setAttribute('fill', 'transparent');
   const handles = clone.querySelector('#layer-handles');
   if (handles) handles.remove();
-  clone.setAttribute('width',  VIEW_W);
-  clone.setAttribute('height', VIEW_H);
+  const v = getView();
+  clone.setAttribute('width',  v.w);
+  clone.setAttribute('height', v.h);
   return new XMLSerializer().serializeToString(clone);
 }
 
 function downloadBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
 function exportSvg() {
   const xml = buildExportSvg();
-  const blob = new Blob(
-    ['<?xml version="1.0" encoding="UTF-8"?>\n', xml],
-    { type: 'image/svg+xml' }
-  );
+  const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n', xml], { type: 'image/svg+xml' });
   downloadBlob(blob, `cards-lab-${Date.now()}.svg`);
 }
 
@@ -451,10 +687,11 @@ function exportPng() {
   const svgUrl = URL.createObjectURL(svgBlob);
   const img = new Image();
   img.onload = () => {
+    const v = getView();
     const scale = 2;
     const canvas = document.createElement('canvas');
-    canvas.width  = VIEW_W * scale;
-    canvas.height = VIEW_H * scale;
+    canvas.width  = v.w * scale;
+    canvas.height = v.h * scale;
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -463,38 +700,43 @@ function exportPng() {
       if (blob) downloadBlob(blob, `cards-lab-${Date.now()}.png`);
     }, 'image/png');
   };
-  img.onerror = () => {
-    URL.revokeObjectURL(svgUrl);
-    console.error('PNG export failed');
-  };
+  img.onerror = () => { URL.revokeObjectURL(svgUrl); console.error('PNG export failed'); };
   img.src = svgUrl;
 }
 
-// ────────────────────────────── URL hash (shareable state)
+// ────────────────────────────── URL hash
 
 function _h(hex) { return (hex || '').replace('#', ''); }
 function _u(v)   { return v ? '#' + v : '#000000'; }
 
 function serializeState() {
   const s = state;
-  return [
+  const parts = [
+    `as=${encodeURIComponent(s.aspect)}`,
     `c=${s.cell}`,
     `r=${s.radius}`,
     `g=${s.showGrid ? 1 : 0}`,
     `o=${s.gridOpacity}`,
     `bg=${_h(s.bgColor)}`,
+    `ol=${s.outline.on ? 1 : 0},${_h(s.outline.color)},${s.outline.width}`,
     `a=${s.A.w},${s.A.h},${s.A.col},${s.A.row},${_h(s.A.color)}`,
     `b=${s.B.w},${s.B.h},${s.B.col},${s.B.row},${_h(s.B.color)}`,
-    `s=${s.shadow.mode},${_h(s.shadow.color)},${s.shadow.darken}`,
-  ].join('&');
+    `sh=${s.shadow.mode},${_h(s.shadow.color)},${s.shadow.darken}`,
+  ];
+  if (s.texts.length) {
+    parts.push('tx=' + s.texts.map(t =>
+      [t.col, t.row, t.fontSize, _h(t.color), encodeURIComponent(t.content)].join(',')
+    ).join('|'));
+  }
+  return parts.join('&');
 }
 
 function parseCard(str, target) {
   const parts = str.split(',');
   if (parts.length < 5) return;
   const [w, h, col, row, color] = parts;
-  target.w     = clampInt(w,   1, 40);
-  target.h     = clampInt(h,   1, 40);
+  target.w     = clampInt(w,   1, 60);
+  target.h     = clampInt(h,   1, 60);
   target.col   = clampInt(col, 0, 200);
   target.row   = clampInt(row, 0, 200);
   target.color = _u(color);
@@ -511,18 +753,41 @@ function deserializeState(hash) {
     map[p.slice(0, i)] = p.slice(i + 1);
   });
   try {
+    if (map.as) {
+      const a = decodeURIComponent(map.as);
+      if (ASPECTS[a]) state.aspect = a;
+    }
     if (map.c)  state.cell        = clampInt(map.c, 8, 200);
     if (map.r)  state.radius      = clampInt(map.r, 0, 200);
     if (map.g !== undefined) state.showGrid = map.g === '1';
     if (map.o)  state.gridOpacity = clampInt(map.o, 0, 100);
     if (map.bg) state.bgColor     = _u(map.bg);
+    if (map.ol) {
+      const [on, color, w] = map.ol.split(',');
+      state.outline.on    = on === '1';
+      state.outline.color = _u(color);
+      state.outline.width = clampInt(w, 1, 8);
+    }
     if (map.a)  parseCard(map.a, state.A);
     if (map.b)  parseCard(map.b, state.B);
-    if (map.s) {
-      const [mode, color, dk] = map.s.split(',');
-      if (mode) state.shadow.mode   = mode;
+    if (map.sh) {
+      const [mode, color, dk] = map.sh.split(',');
+      if (mode) state.shadow.mode = mode;
       if (color) state.shadow.color = _u(color);
       if (dk !== undefined) state.shadow.darken = clampInt(dk, 0, 100);
+    }
+    if (map.tx) {
+      state.texts = map.tx.split('|').map((s, i) => {
+        const [col, row, fs, color, content] = s.split(',');
+        return {
+          id: 't' + i + '_' + Date.now().toString(36),
+          col: clampInt(col, 0, 200),
+          row: clampInt(row, 0, 200),
+          fontSize: clampInt(fs, 8, 200),
+          color: _u(color),
+          content: decodeURIComponent(content || ''),
+        };
+      });
     }
     return true;
   } catch (e) {
@@ -536,68 +801,85 @@ function pushHash() {
   if (_hashTimer) clearTimeout(_hashTimer);
   _hashTimer = setTimeout(() => {
     const next = '#' + serializeState();
-    if (location.hash !== next) {
-      history.replaceState(null, '', next);
-    }
+    if (location.hash !== next) history.replaceState(null, '', next);
   }, 200);
 }
 
 async function copyShareLink() {
-  pushHash();
-  // ensure URL is up-to-date even before the debounce fires
   const url = location.origin + location.pathname + '#' + serializeState();
   try {
     await navigator.clipboard.writeText(url);
-    flashShareBtn('Copiado!');
+    flashBtn('btn-share', 'Copiado!');
   } catch (e) {
-    // fallback: open prompt with the URL
     window.prompt('Copia o link:', url);
   }
 }
 
-function flashShareBtn(label) {
-  const btn = document.getElementById('btn-share');
+function flashBtn(id, label) {
+  const btn = document.getElementById(id);
   if (!btn) return;
   const original = btn.textContent;
   btn.textContent = label;
   btn.classList.add('is-flashed');
-  setTimeout(() => {
-    btn.textContent = original;
-    btn.classList.remove('is-flashed');
-  }, 1200);
+  setTimeout(() => { btn.textContent = original; btn.classList.remove('is-flashed'); }, 1200);
 }
 
-// ────────────────────────────── drag (move + resize) + tap
+// ────────────────────────────── drag (cards + texts + images)
 
 let drag = null;
 const TAP_THRESHOLD_PX = 6;
 
-function pointerToCell(evt) {
+function pointerToSvg(evt) {
   const pt = stage.createSVGPoint();
-  pt.x = evt.clientX;
-  pt.y = evt.clientY;
+  pt.x = evt.clientX; pt.y = evt.clientY;
   const ctm = stage.getScreenCTM();
-  if (!ctm) return { col: 0, row: 0 };
-  const sp = pt.matrixTransform(ctm.inverse());
-  return { col: sp.x / state.cell, row: sp.y / state.cell };
+  if (!ctm) return { x: 0, y: 0 };
+  return pt.matrixTransform(ctm.inverse());
+}
+function pointerToCell(evt) {
+  const p = pointerToSvg(evt);
+  return { col: p.x / state.cell, row: p.y / state.cell };
+}
+
+function identifyDragTarget(evt) {
+  let n = evt.target;
+  while (n && n !== stage) {
+    const ds = n.dataset;
+    if (ds) {
+      if (ds.card)     return { kind: 'card',  id: ds.card,     handle: ds.handle };
+      if (ds.imageId)  return { kind: 'image', id: ds.imageId,  handle: ds.handle };
+      if (ds.textId)   return { kind: 'text',  id: ds.textId,   handle: ds.handle };
+    }
+    n = n.parentNode;
+  }
+  return null;
+}
+
+function getDragTarget(d) {
+  if (d.kind === 'card')  return state[d.id];
+  if (d.kind === 'image') return state.images.find(i => i.id === d.id);
+  if (d.kind === 'text')  return state.texts.find(t => t.id === d.id);
+  return null;
 }
 
 stage.addEventListener('pointerdown', evt => {
-  const ds = evt.target && evt.target.dataset;
-  if (!ds || !ds.card) return;
+  const tgt = identifyDragTarget(evt);
+  if (!tgt) return;
   evt.preventDefault();
   stage.setPointerCapture(evt.pointerId);
   stage.classList.add('is-dragging');
+  const obj = getDragTarget(tgt);
+  if (!obj) return;
   const start = pointerToCell(evt);
   drag = {
-    card: ds.card,
-    handle: ds.handle || 'move',
+    kind: tgt.kind,
+    id: tgt.id,
+    handle: tgt.handle || 'move',
     pointerId: evt.pointerId,
-    startX: evt.clientX,
-    startY: evt.clientY,
+    startX: evt.clientX, startY: evt.clientY,
     moved: false,
-    offsetCol: start.col - state[ds.card].col,
-    offsetRow: start.row - state[ds.card].row,
+    offsetCol: start.col - obj.col,
+    offsetRow: start.row - obj.row,
   };
 });
 
@@ -608,25 +890,26 @@ stage.addEventListener('pointermove', evt => {
   if (!drag.moved && Math.hypot(dx, dy) > TAP_THRESHOLD_PX) drag.moved = true;
   if (!drag.moved) return;
 
+  const obj = getDragTarget(drag);
+  if (!obj) return;
   const { col, row } = pointerToCell(evt);
-  const c = state[drag.card];
 
   if (drag.handle === 'resize') {
-    const newW = Math.max(1, Math.min(40, Math.round(col - c.col)));
-    const newH = Math.max(1, Math.min(40, Math.round(row - c.row)));
-    if (newW !== c.w || newH !== c.h) {
-      c.w = newW;
-      c.h = newH;
-      c.size = 'custom';
+    const newW = Math.max(1, Math.min(60, Math.round(col - obj.col)));
+    const newH = Math.max(1, Math.min(60, Math.round(row - obj.row)));
+    if (newW !== obj.w || newH !== obj.h) {
+      obj.w = newW;
+      obj.h = newH;
+      if (drag.kind === 'card') obj.size = 'custom';
       syncUI();
       render();
     }
   } else {
     const newCol = clampInt(Math.round(col - drag.offsetCol), 0, 200);
     const newRow = clampInt(Math.round(row - drag.offsetRow), 0, 200);
-    if (newCol !== c.col || newRow !== c.row) {
-      c.col = newCol;
-      c.row = newRow;
+    if (newCol !== obj.col || newRow !== obj.row) {
+      obj.col = newCol;
+      obj.row = newRow;
       syncUI();
       render();
     }
@@ -638,33 +921,36 @@ function endDrag(evt) {
   if (evt && evt.pointerId !== drag.pointerId) return;
   try { stage.releasePointerCapture(drag.pointerId); } catch (e) {}
   const wasTap = !drag.moved && drag.handle === 'move';
-  const tappedCard = drag.card;
+  const tapped = { kind: drag.kind, id: drag.id };
   drag = null;
   stage.classList.remove('is-dragging');
-  if (wasTap) selectCard(tappedCard);
+  if (wasTap) selectOnTap(tapped);
   render();
 }
 
 stage.addEventListener('pointerup',     endDrag);
 stage.addEventListener('pointercancel', endDrag);
 
-function selectCard(card) {
-  const group = document.querySelector(`.group[data-card-group="${card}"]`);
+function selectOnTap({ kind, id }) {
+  let selector = null;
+  if (kind === 'card') selector = `.group[data-card-group="${id}"]`;
+  if (kind === 'text') selector = '#group-texts';
+  if (kind === 'image') selector = '#group-images';
+  const group = selector ? document.querySelector(selector) : null;
   if (!group) return;
   group.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   group.classList.add('is-flashed');
   setTimeout(() => group.classList.remove('is-flashed'), 900);
 }
 
-// ────────────────────────────── brand title letter split + boot anim
+// ────────────────────────────── title + boot
 
 function splitTitle() {
   const titleEl = document.querySelector('.brand-title');
   if (!titleEl) return;
   const text = titleEl.dataset.text || titleEl.textContent;
   titleEl.textContent = '';
-  const chars = [...text];
-  chars.forEach((c, i) => {
+  [...text].forEach((c, i) => {
     const s = document.createElement('span');
     s.className = 'ch' + (c === ' ' ? ' space' : '');
     s.style.setProperty('--i', i);
@@ -677,7 +963,7 @@ function splitTitle() {
 
 function boot() {
   document.body.classList.add('is-booting');
-  setTimeout(() => document.body.classList.remove('is-booting'), 1500);
+  setTimeout(() => document.body.classList.remove('is-booting'), 1600);
 }
 
 // ────────────────────────────── go
@@ -686,8 +972,11 @@ if (location.hash && location.hash.length > 1) {
   deserializeState(location.hash);
 }
 
+applyAspect();
 bindControls();
 splitTitle();
 syncUI();
+rebuildTextList();
+rebuildImageList();
 render();
 boot();

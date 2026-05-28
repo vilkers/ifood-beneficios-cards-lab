@@ -4,9 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cards Lab — iFood Benefícios</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="preload" as="font" type="font/woff2" href="fonts/TipoiFoodTitulos-ExtraBold.woff2" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="fonts/TipoiFoodTextos-Regular.woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,7 +14,7 @@
       <div class="brand-mark" aria-hidden="true"></div>
       <div class="brand-text">
         <h1 class="brand-title" data-text="Cards Lab">Cards Lab</h1>
-        <span class="brand-sub">iFood Benefícios · v0.2</span>
+        <span class="brand-sub">iFood Benefícios · v0.4</span>
       </div>
     </div>
     <div class="topbar-actions">
@@ -28,25 +27,29 @@
 
   <main class="layout">
     <section class="canvas-wrap">
-      <div class="canvas-frame">
-        <svg
-          id="stage"
-          viewBox="0 0 1000 700"
-          preserveAspectRatio="xMidYMid meet"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
-              <rect x="3" y="3" width="34" height="34" rx="5" ry="5" fill="none" stroke="rgba(63,62,62,0.18)" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect id="canvas-bg" x="0" y="0" width="1000" height="700" fill="#f7f0e6"/>
-          <rect id="grid-bg" x="0" y="0" width="1000" height="700" fill="url(#grid-pattern)"/>
-          <g id="layer-shadow"></g>
-          <g id="layer-back"></g>
-          <g id="layer-front"></g>
-          <g id="layer-handles"></g>
-        </svg>
+      <div class="canvas-area">
+        <div class="canvas-frame" id="frame">
+          <svg
+            id="stage"
+            viewBox="0 0 1280 720"
+            preserveAspectRatio="xMidYMid meet"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+                <rect id="grid-cell" x="3" y="3" width="34" height="34" rx="5" ry="5" fill="none" stroke="rgba(63,62,62,0.18)" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect id="canvas-bg" x="0" y="0" width="1280" height="720" fill="#f7f0e6"/>
+            <rect id="grid-bg" x="0" y="0" width="1280" height="720" fill="url(#grid-pattern)"/>
+            <g id="layer-shadow"></g>
+            <g id="layer-back"></g>
+            <g id="layer-front"></g>
+            <g id="layer-images"></g>
+            <g id="layer-text"></g>
+            <g id="layer-handles"></g>
+          </svg>
+        </div>
       </div>
       <div class="canvas-meta">
         <span id="meta-grid">Grid · célula</span>
@@ -56,6 +59,19 @@
 
     <aside class="panel">
       <div class="panel-scroll">
+
+        <div class="group">
+          <h3 class="group-title">Formato</h3>
+          <div class="field">
+            <label class="field-label">Proporção</label>
+            <div class="segmented seg-4" data-target="aspect" data-prop="value">
+              <button type="button" data-value="16:9">16:9</button>
+              <button type="button" data-value="9:16">9:16</button>
+              <button type="button" data-value="4:5">4:5</button>
+              <button type="button" data-value="1:1">1:1</button>
+            </div>
+          </div>
+        </div>
 
         <div class="group" data-card-group="A">
           <h3 class="group-title">Cartão A <span class="tag tag-back">trás</span></h3>
@@ -83,18 +99,17 @@
           <div class="field row">
             <div>
               <label class="field-label" for="A-w">Largura</label>
-              <input id="A-w" type="number" data-target="A" data-prop="w" min="1" max="40" step="1">
+              <input id="A-w" type="number" data-target="A" data-prop="w" min="1" max="60" step="1">
             </div>
             <div>
               <label class="field-label" for="A-h">Altura</label>
-              <input id="A-h" type="number" data-target="A" data-prop="h" min="1" max="40" step="1">
+              <input id="A-h" type="number" data-target="A" data-prop="h" min="1" max="60" step="1">
             </div>
           </div>
 
           <div class="field">
             <label class="field-label">Cor</label>
             <div class="swatches" data-target="A" data-prop="color"></div>
-            <input class="color-custom" type="color" data-target="A" data-prop="color">
           </div>
         </div>
 
@@ -124,24 +139,22 @@
           <div class="field row">
             <div>
               <label class="field-label" for="B-w">Largura</label>
-              <input id="B-w" type="number" data-target="B" data-prop="w" min="1" max="40" step="1">
+              <input id="B-w" type="number" data-target="B" data-prop="w" min="1" max="60" step="1">
             </div>
             <div>
               <label class="field-label" for="B-h">Altura</label>
-              <input id="B-h" type="number" data-target="B" data-prop="h" min="1" max="40" step="1">
+              <input id="B-h" type="number" data-target="B" data-prop="h" min="1" max="60" step="1">
             </div>
           </div>
 
           <div class="field">
             <label class="field-label">Cor</label>
             <div class="swatches" data-target="B" data-prop="color"></div>
-            <input class="color-custom" type="color" data-target="B" data-prop="color">
           </div>
         </div>
 
         <div class="group">
           <h3 class="group-title">Extrusão</h3>
-
           <div class="field">
             <label class="field-label">Cor da ponte</label>
             <div class="segmented" data-target="shadow" data-prop="mode">
@@ -149,9 +162,7 @@
               <button type="button" data-value="custom">Custom</button>
             </div>
             <div class="swatches" data-target="shadow" data-prop="color"></div>
-            <input class="color-custom" type="color" data-target="shadow" data-prop="color">
           </div>
-
           <div class="field">
             <label class="field-label" for="inp-darken">
               <span>Intensidade</span>
@@ -163,7 +174,6 @@
 
         <div class="group">
           <h3 class="group-title">Forma</h3>
-
           <div class="field">
             <label class="field-label" for="inp-radius">
               <span>Raio dos cantos</span>
@@ -171,7 +181,6 @@
             </label>
             <input id="inp-radius" type="range" min="0" max="60" step="1">
           </div>
-
           <div class="field">
             <label class="field-label" for="inp-cell">
               <span>Tamanho da célula</span>
@@ -182,14 +191,30 @@
         </div>
 
         <div class="group">
-          <h3 class="group-title">Cenário</h3>
+          <h3 class="group-title">Outline</h3>
+          <label class="check">
+            <input id="inp-outline" type="checkbox">
+            Ativar (cartões, sombra, imagens)
+          </label>
+          <div class="field">
+            <label class="field-label">Cor</label>
+            <div class="swatches" data-target="outline" data-prop="color"></div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="inp-outline-w">
+              <span>Espessura</span>
+              <span class="value" id="val-outline-w">2px</span>
+            </label>
+            <input id="inp-outline-w" type="range" min="1" max="8" step="1">
+          </div>
+        </div>
 
+        <div class="group">
+          <h3 class="group-title">Cenário</h3>
           <div class="field">
             <label class="field-label">Cor de fundo</label>
             <div class="swatches" data-target="bg" data-prop="color"></div>
-            <input class="color-custom" type="color" data-target="bg" data-prop="color">
           </div>
-
           <div class="field">
             <label class="field-label" for="inp-grid-op">
               <span>Intensidade do grid</span>
@@ -197,11 +222,23 @@
             </label>
             <input id="inp-grid-op" type="range" min="0" max="60" step="1">
           </div>
-
           <label class="check">
             <input id="inp-grid" type="checkbox">
             Mostrar grid
           </label>
+        </div>
+
+        <div class="group" id="group-texts">
+          <h3 class="group-title">Textos</h3>
+          <button id="btn-add-text" class="btn ghost btn-block" type="button">+ Adicionar texto</button>
+          <div id="list-texts" class="sub-list"></div>
+        </div>
+
+        <div class="group" id="group-images">
+          <h3 class="group-title">Imagens</h3>
+          <button id="btn-add-image" class="btn ghost btn-block" type="button">+ Adicionar imagem</button>
+          <input id="inp-image" type="file" accept="image/*" hidden>
+          <div id="list-images" class="sub-list"></div>
         </div>
 
       </div>
