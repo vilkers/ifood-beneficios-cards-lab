@@ -84,6 +84,17 @@ function darken(hex, percent) {
   return rgbToHex({ r: Math.round(r * f), g: Math.round(g * f), b: Math.round(b * f) });
 }
 
+function luminance(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+function gridStroke(bgHex, opacityPct) {
+  const lum = luminance(bgHex);
+  const base = lum > 0.55 ? '63, 62, 62' : '255, 255, 255';
+  return `rgba(${base}, ${opacityPct / 100})`;
+}
+
 // ────────────────────────────── geometry
 
 function cardRect(card) {
@@ -199,10 +210,15 @@ function fitFrame() {
 }
 
 window.addEventListener('resize', fitFrame);
+window.addEventListener('load', fitFrame);
 if (typeof ResizeObserver !== 'undefined') {
   const ro = new ResizeObserver(fitFrame);
   ro.observe(document.querySelector('.canvas-area'));
 }
+// extra safety: re-fit after the first paint cycles
+requestAnimationFrame(() => requestAnimationFrame(fitFrame));
+setTimeout(fitFrame, 100);
+setTimeout(fitFrame, 400);
 
 function render() {
   const v = getView();
@@ -224,7 +240,7 @@ function render() {
   gridRect.setAttribute('height', inner);
   gridRect.setAttribute('rx', cellR);
   gridRect.setAttribute('ry', cellR);
-  gridRect.setAttribute('stroke', `rgba(63, 62, 62, ${state.gridOpacity / 100})`);
+  gridRect.setAttribute('stroke', gridStroke(state.bgColor, state.gridOpacity));
   gridBg.setAttribute('fill', state.showGrid ? 'url(#grid-pattern)' : 'transparent');
 
   // cards
