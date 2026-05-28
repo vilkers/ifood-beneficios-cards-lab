@@ -308,12 +308,21 @@ function render() {
     const iy = im.row * cell;
     const iw = im.w * cell;
     const ih = im.h * cell;
+    const clipId = 'clip-' + im.id;
     const g = el('g', { 'data-image-id': im.id });
+    // clipPath inline: rounded corners follow state.radius
+    const clipPath = el('clipPath', { id: clipId });
+    clipPath.appendChild(el('rect', {
+      x: ix, y: iy, width: iw, height: ih,
+      rx: state.radius, ry: state.radius,
+    }));
+    g.appendChild(clipPath);
     const img = el('image', {
       x: ix, y: iy, width: iw, height: ih,
       href: im.dataUrl,
       preserveAspectRatio: 'xMidYMid meet',
       'data-image-id': im.id,
+      'clip-path': `url(#${clipId})`,
     });
     img.setAttributeNS(XLINK, 'href', im.dataUrl);
     if (drag && drag.kind === 'image' && drag.id === im.id && drag.moved) {
