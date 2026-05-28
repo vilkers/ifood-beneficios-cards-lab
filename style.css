@@ -372,7 +372,8 @@ body {
 /* ───────── inputs ───────── */
 
 input[type="number"],
-input[type="text"].text-input {
+input[type="text"].text-input,
+textarea.text-input {
   appearance: none;
   -moz-appearance: textfield;
   width: 100%;
@@ -388,8 +389,18 @@ input[type="text"].text-input {
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
+textarea.text-input.text-area {
+  font-family: 'iFood Titulos', sans-serif;
+  line-height: 1.25;
+  resize: vertical;
+  min-height: 44px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 input[type="number"]:focus,
-input[type="text"].text-input:focus {
+input[type="text"].text-input:focus,
+textarea.text-input:focus {
   outline: none;
   border-color: var(--bnf-marsala);
   background: #fff;

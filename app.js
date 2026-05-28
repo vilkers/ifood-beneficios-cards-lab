@@ -146,11 +146,13 @@ const frame     = document.getElementById('frame');
 const canvasBg  = document.getElementById('canvas-bg');
 const gridBg    = document.getElementById('grid-bg');
 const layerS    = document.getElementById('layer-shadow');
+const layerEB   = document.getElementById('layer-extra-back');
 const layerA    = document.getElementById('layer-back');
+const layerEM   = document.getElementById('layer-extra-mid');
 const layerB    = document.getElementById('layer-front');
-const layerImg  = document.getElementById('layer-images');
-const layerTxt  = document.getElementById('layer-text');
+const layerEF   = document.getElementById('layer-extra-front');
 const layerH    = document.getElementById('layer-handles');
+const extraLayer = z => z === 'back' ? layerEB : (z === 'mid' ? layerEM : layerEF);
 const gridPat   = document.getElementById('grid-pattern');
 const metaGrid  = document.getElementById('meta-grid');
 const metaCards = document.getElementById('meta-cards');
@@ -203,17 +205,23 @@ function render() {
   const rA = cardRect(state.A);
   const rB = cardRect(state.B);
 
-  // extrusion
-  const hull = convexHull(
-    sampleRoundedRect(rA, state.radius).concat(sampleRoundedRect(rB, state.radius))
-  );
-  const hullPts = hull.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+  // extrusion: include images marked inHull
+  let hullPts = sampleRoundedRect(rA, state.radius)
+    .concat(sampleRoundedRect(rB, state.radius));
+  for (const im of state.images) {
+    if (!im.inHull) continue;
+    hullPts = hullPts.concat(sampleRoundedRect({
+      x: im.col * cell, y: im.row * cell, w: im.w * cell, h: im.h * cell,
+    }, state.radius));
+  }
+  const hull = convexHull(hullPts);
+  const hullStr = hull.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
 
   const shadowColor = state.shadow.mode === 'auto'
     ? darken(state.B.color, state.shadow.darken)
     : state.shadow.color;
 
-  clear(layerS); clear(layerA); clear(layerB); clear(layerImg); clear(layerTxt); clear(layerH);
+  clear(layerS); clear(layerEB); clear(layerA); clear(layerEM); clear(layerB); clear(layerEF); clear(layerH);
 
   // outline attrs
   const outlineOn = !!state.outline.on;
@@ -221,7 +229,7 @@ function render() {
   const outlineWidth = state.outline.width;
 
   layerS.appendChild(el('polygon', {
-    points: hullPts,
+    points: hullStr,
     fill: shadowColor,
     stroke: outlineOn ? outlineColor : null,
     'stroke-width': outlineOn ? outlineWidth : null,
@@ -252,14 +260,13 @@ function render() {
   if (drag && drag.kind === 'card' && drag.id === 'B' && drag.moved) bAttrs['class'] = 'is-active';
   layerB.appendChild(el('rect', bAttrs));
 
-  // images
+  // images — by layer
   for (const im of state.images) {
     const ix = im.col * cell;
     const iy = im.row * cell;
     const iw = im.w * cell;
     const ih = im.h * cell;
     const g = el('g', { 'data-image-id': im.id });
-    // SVG <image> with both href and xlink:href for max compat
     const img = el('image', {
       x: ix, y: iy, width: iw, height: ih,
       href: im.dataUrl,
@@ -281,17 +288,18 @@ function render() {
         'pointer-events': 'none',
       }));
     }
-    layerImg.appendChild(g);
+    extraLayer(im.layer || 'front').appendChild(g);
   }
 
-  // texts
+  // texts — by layer, multi-line via tspans, family + weight
   for (const t of state.texts) {
     const tx = t.col * cell;
     const ty = t.row * cell;
+    const fam = TEXT_FAMILIES[t.family] ? TEXT_FAMILIES[t.family].family : TEXT_FAMILIES.titulos.family;
     const tEl = el('text', {
       x: tx, y: ty,
       'dominant-baseline': 'hanging',
-      'font-family': 'iFood Titulos, sans-serif',
+      'font-family': fam,
       'font-weight': t.weight || 700,
       'font-size': t.fontSize,
       fill: t.color,
@@ -300,8 +308,13 @@ function render() {
     if (drag && drag.kind === 'text' && drag.id === t.id && drag.moved) {
       tEl.setAttribute('class', 'is-active');
     }
-    tEl.textContent = t.content;
-    layerTxt.appendChild(tEl);
+    const lines = (t.content || '').split('\n');
+    lines.forEach((ln, i) => {
+      const ts = el('tspan', { x: tx, dy: i === 0 ? '0' : '1.15em' });
+      ts.textContent = ln || ' ';
+      tEl.appendChild(ts);
+    });
+    extraLayer(t.layer || 'front').appendChild(tEl);
   }
 
   // resize handles (cards + images)
@@ -502,16 +515,35 @@ function bindControls() {
 
 // ────────────────────────────── texts
 
+const TEXT_FAMILIES = {
+  titulos: { label: 'Títulos', family: 'iFood Titulos, sans-serif', weights: [
+    { v: 400, label: 'Regular' },
+    { v: 700, label: 'Bold' },
+    { v: 800, label: 'Extra' },
+  ]},
+  textos:  { label: 'Textos',  family: 'iFood Textos, sans-serif',  weights: [
+    { v: 400, label: 'Regular' },
+    { v: 500, label: 'Medium' },
+    { v: 700, label: 'Bold' },
+  ]},
+};
+
+function defaultWeightFor(family) {
+  return family === 'textos' ? 500 : 700;
+}
+
 function addText() {
   const v = getView();
   const id = 't' + Date.now().toString(36);
   state.texts.push({
     id,
-    content: 'iFood Benefícios',
+    content: 'iFood\nBenefícios',
     col: Math.max(0, Math.floor(v.w / state.cell / 2) - 4),
-    row: Math.max(0, Math.floor(v.h / state.cell / 2)),
-    fontSize: 48,
+    row: Math.max(0, Math.floor(v.h / state.cell / 2) - 2),
+    fontSize: 56,
     color: '#1f000b',
+    family: 'titulos',
+    weight: 800,
   });
   rebuildTextList();
   render();
@@ -523,78 +555,166 @@ function deleteText(id) {
   render();
 }
 
+// shared helpers for dynamic UI items
+function makeSeg(values, current, onPick) {
+  const seg = document.createElement('div');
+  seg.className = 'segmented';
+  if (values.length === 4) seg.classList.add('seg-4');
+  if (values.length === 2) seg.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  values.forEach(opt => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.value = String(opt.value);
+    b.textContent = opt.label;
+    if (String(opt.value) === String(current)) b.classList.add('active');
+    b.addEventListener('click', () => {
+      seg.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      onPick(opt.value);
+    });
+    seg.appendChild(b);
+  });
+  return seg;
+}
+
+function makeSwatchRow(currentHex, onPick) {
+  const row = document.createElement('div');
+  row.className = 'swatches';
+  PALETTE.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'swatch';
+    b.style.background = c.hex; b.dataset.value = c.hex; b.title = c.name;
+    if (c.hex.toLowerCase() === String(currentHex).toLowerCase()) b.classList.add('active');
+    b.addEventListener('click', () => {
+      row.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      b.classList.add('active');
+      onPick(c.hex);
+    });
+    row.appendChild(b);
+  });
+  return row;
+}
+
+function makeRange(label, value, min, max, suffix, onInput) {
+  const field = document.createElement('div');
+  field.className = 'field';
+  const lab = document.createElement('label');
+  lab.className = 'field-label';
+  lab.innerHTML = `<span>${label}</span><span class="value">${value}${suffix}</span>`;
+  const r = document.createElement('input');
+  r.type = 'range'; r.min = min; r.max = max; r.step = 1; r.value = value;
+  r.addEventListener('input', () => {
+    const v = parseInt(r.value, 10);
+    lab.querySelector('.value').textContent = v + suffix;
+    onInput(v);
+  });
+  field.appendChild(lab); field.appendChild(r);
+  return field;
+}
+
+function makeField(label, control) {
+  const f = document.createElement('div');
+  f.className = 'field';
+  const lab = document.createElement('label');
+  lab.className = 'field-label';
+  lab.textContent = label;
+  f.appendChild(lab); f.appendChild(control);
+  return f;
+}
+
+function makeSubHeader(title, onDelete) {
+  const head = document.createElement('div');
+  head.className = 'sub-header';
+  const t = document.createElement('span');
+  t.className = 'sub-title'; t.textContent = title;
+  const del = document.createElement('button');
+  del.className = 'btn-icon'; del.type = 'button';
+  del.textContent = '×';
+  del.addEventListener('click', onDelete);
+  head.appendChild(t); head.appendChild(del);
+  return head;
+}
+
 function rebuildTextList() {
   const list = document.getElementById('list-texts');
   list.innerHTML = '';
   state.texts.forEach((t, i) => {
+    if (!t.family) t.family = 'titulos';
+    if (!t.weight) t.weight = defaultWeightFor(t.family);
+    if (!t.layer)  t.layer  = 'front';
+
     const item = document.createElement('div');
     item.className = 'sub-item';
     item.dataset.id = t.id;
 
-    const head = document.createElement('div');
-    head.className = 'sub-header';
-    const title = document.createElement('span');
-    title.className = 'sub-title';
-    title.textContent = `Texto ${i + 1}`;
-    const del = document.createElement('button');
-    del.className = 'btn-icon'; del.type = 'button';
-    del.textContent = '×';
-    del.addEventListener('click', () => deleteText(t.id));
-    head.appendChild(title); head.appendChild(del);
-    item.appendChild(head);
+    item.appendChild(makeSubHeader(`Texto ${i + 1}`, () => deleteText(t.id)));
 
-    const contentInput = document.createElement('input');
-    contentInput.type = 'text';
-    contentInput.className = 'text-input';
-    contentInput.value = t.content;
-    contentInput.placeholder = 'Texto';
-    contentInput.addEventListener('input', () => {
-      t.content = contentInput.value;
+    // textarea (multi-line)
+    const ta = document.createElement('textarea');
+    ta.className = 'text-input text-area';
+    ta.rows = 2;
+    ta.placeholder = 'Texto · Enter pra quebrar linha';
+    ta.value = t.content;
+    ta.addEventListener('input', () => {
+      t.content = ta.value;
+      autoGrow(ta);
       render();
     });
-    item.appendChild(contentInput);
+    requestAnimationFrame(() => autoGrow(ta));
+    item.appendChild(ta);
 
-    const sizeField = document.createElement('div');
-    sizeField.className = 'field';
-    const sizeLabel = document.createElement('label');
-    sizeLabel.className = 'field-label';
-    sizeLabel.innerHTML = `<span>Tamanho</span><span class="value">${t.fontSize}px</span>`;
-    const sizeRange = document.createElement('input');
-    sizeRange.type = 'range'; sizeRange.min = 12; sizeRange.max = 160; sizeRange.step = 1;
-    sizeRange.value = t.fontSize;
-    sizeRange.addEventListener('input', () => {
-      t.fontSize = parseInt(sizeRange.value, 10);
-      sizeLabel.querySelector('.value').textContent = t.fontSize + 'px';
-      render();
-    });
-    sizeField.appendChild(sizeLabel); sizeField.appendChild(sizeRange);
-    item.appendChild(sizeField);
-
-    const colorField = document.createElement('div');
-    colorField.className = 'field';
-    const colorLabel = document.createElement('label');
-    colorLabel.className = 'field-label';
-    colorLabel.textContent = 'Cor';
-    const swatches = document.createElement('div');
-    swatches.className = 'swatches';
-    PALETTE.forEach(c => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'swatch';
-      b.style.background = c.hex; b.dataset.value = c.hex; b.title = c.name;
-      if (c.hex.toLowerCase() === t.color.toLowerCase()) b.classList.add('active');
-      b.addEventListener('click', () => {
-        t.color = c.hex;
-        swatches.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
-        b.classList.add('active');
+    // family
+    item.appendChild(makeField('Família', makeSeg(
+      [
+        { value: 'titulos', label: 'Títulos' },
+        { value: 'textos',  label: 'Textos'  },
+      ],
+      t.family,
+      v => {
+        t.family = v;
+        const allowed = TEXT_FAMILIES[v].weights.map(w => w.v);
+        if (!allowed.includes(t.weight)) t.weight = defaultWeightFor(v);
+        rebuildTextList();
         render();
-      });
-      swatches.appendChild(b);
-    });
-    colorField.appendChild(colorLabel); colorField.appendChild(swatches);
-    item.appendChild(colorField);
+      }
+    )));
+
+    // weight (depends on family)
+    const weightOpts = TEXT_FAMILIES[t.family].weights.map(w => ({ value: w.v, label: w.label }));
+    item.appendChild(makeField('Peso', makeSeg(
+      weightOpts,
+      t.weight,
+      v => { t.weight = v; render(); }
+    )));
+
+    // size
+    item.appendChild(makeRange('Tamanho', t.fontSize, 12, 200, 'px', v => {
+      t.fontSize = v; render();
+    }));
+
+    // color
+    item.appendChild(makeField('Cor', makeSwatchRow(t.color, hex => {
+      t.color = hex; render();
+    })));
+
+    // layer
+    item.appendChild(makeField('Camada', makeSeg(
+      [
+        { value: 'back',  label: 'Trás'   },
+        { value: 'mid',   label: 'Meio'   },
+        { value: 'front', label: 'Frente' },
+      ],
+      t.layer,
+      v => { t.layer = v; render(); }
+    )));
 
     list.appendChild(item);
   });
+}
+
+function autoGrow(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(220, ta.scrollHeight + 2) + 'px';
 }
 
 // ────────────────────────────── images
@@ -617,6 +737,8 @@ function loadImageFile(file) {
         row: Math.max(0, Math.floor(v.h / state.cell / 2 - hCells / 2)),
         w: wCells,
         h: hCells,
+        layer: 'front',     // 'back' | 'mid' | 'front'
+        inHull: false,      // connect to extrusion
       });
       rebuildImageList();
       render();
@@ -636,26 +758,40 @@ function rebuildImageList() {
   const list = document.getElementById('list-images');
   list.innerHTML = '';
   state.images.forEach((im, i) => {
+    if (!im.layer) im.layer = 'front';
+    if (typeof im.inHull !== 'boolean') im.inHull = false;
+
     const item = document.createElement('div');
     item.className = 'sub-item';
 
-    const head = document.createElement('div');
-    head.className = 'sub-header';
-    const title = document.createElement('span');
-    title.className = 'sub-title';
-    title.textContent = `Imagem ${i + 1}`;
-    const del = document.createElement('button');
-    del.className = 'btn-icon'; del.type = 'button';
-    del.textContent = '×';
-    del.addEventListener('click', () => deleteImage(im.id));
-    head.appendChild(title); head.appendChild(del);
-    item.appendChild(head);
+    item.appendChild(makeSubHeader(`Imagem ${i + 1}`, () => deleteImage(im.id)));
 
     const thumb = document.createElement('img');
     thumb.src = im.dataUrl;
     thumb.className = 'img-thumb';
     thumb.alt = '';
     item.appendChild(thumb);
+
+    item.appendChild(makeField('Camada', makeSeg(
+      [
+        { value: 'back',  label: 'Trás'   },
+        { value: 'mid',   label: 'Meio'   },
+        { value: 'front', label: 'Frente' },
+      ],
+      im.layer,
+      v => { im.layer = v; render(); }
+    )));
+
+    // hull toggle
+    const hullLabel = document.createElement('label');
+    hullLabel.className = 'check';
+    const hullCb = document.createElement('input');
+    hullCb.type = 'checkbox';
+    hullCb.checked = im.inHull;
+    hullCb.addEventListener('change', () => { im.inHull = hullCb.checked; render(); });
+    hullLabel.appendChild(hullCb);
+    hullLabel.appendChild(document.createTextNode(' Conectar à extrusão'));
+    item.appendChild(hullLabel);
 
     const hint = document.createElement('div');
     hint.className = 'field-label';
@@ -736,9 +872,11 @@ function serializeState() {
     `sh=${s.shadow.mode},${_h(s.shadow.color)},${s.shadow.darken}`,
   ];
   if (s.texts.length) {
-    parts.push('tx=' + s.texts.map(t =>
-      [t.col, t.row, t.fontSize, _h(t.color), encodeURIComponent(t.content)].join(',')
-    ).join('|'));
+    parts.push('tx=' + s.texts.map(t => [
+      t.col, t.row, t.fontSize, _h(t.color),
+      t.family || 'titulos', t.weight || 700, t.layer || 'front',
+      encodeURIComponent(t.content || ''),
+    ].join(',')).join('|'));
   }
   return parts.join('&');
 }
@@ -790,13 +928,26 @@ function deserializeState(hash) {
     }
     if (map.tx) {
       state.texts = map.tx.split('|').map((s, i) => {
-        const [col, row, fs, color, content] = s.split(',');
+        const parts = s.split(',');
+        // legacy (5 cols) vs new (8 cols)
+        if (parts.length <= 5) {
+          const [col, row, fs, color, content] = parts;
+          return {
+            id: 't' + i + '_' + Date.now().toString(36),
+            col: clampInt(col, 0, 200), row: clampInt(row, 0, 200),
+            fontSize: clampInt(fs, 8, 200), color: _u(color),
+            family: 'titulos', weight: 800, layer: 'front',
+            content: decodeURIComponent(content || ''),
+          };
+        }
+        const [col, row, fs, color, family, weight, layer, content] = parts;
         return {
           id: 't' + i + '_' + Date.now().toString(36),
-          col: clampInt(col, 0, 200),
-          row: clampInt(row, 0, 200),
-          fontSize: clampInt(fs, 8, 200),
-          color: _u(color),
+          col: clampInt(col, 0, 200), row: clampInt(row, 0, 200),
+          fontSize: clampInt(fs, 8, 200), color: _u(color),
+          family: TEXT_FAMILIES[family] ? family : 'titulos',
+          weight: clampInt(weight, 100, 900),
+          layer: ['back','mid','front'].includes(layer) ? layer : 'front',
           content: decodeURIComponent(content || ''),
         };
       });
