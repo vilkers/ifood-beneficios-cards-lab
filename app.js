@@ -175,7 +175,33 @@ function applyAspect() {
   canvasBg.setAttribute('height', v.h);
   gridBg.setAttribute('width',  v.w);
   gridBg.setAttribute('height', v.h);
-  frame.style.aspectRatio = `${v.w} / ${v.h}`;
+  fitFrame();
+}
+
+function fitFrame() {
+  const area = document.querySelector('.canvas-area');
+  if (!area || !frame) return;
+  const v = getView();
+  const aspect = v.w / v.h;
+  const aw = area.clientWidth;
+  const ah = area.clientHeight;
+  if (aw <= 0 || ah <= 0) return;
+  let w, h;
+  if (aw / ah > aspect) {
+    h = ah;
+    w = h * aspect;
+  } else {
+    w = aw;
+    h = w / aspect;
+  }
+  frame.style.width  = Math.floor(w) + 'px';
+  frame.style.height = Math.floor(h) + 'px';
+}
+
+window.addEventListener('resize', fitFrame);
+if (typeof ResizeObserver !== 'undefined') {
+  const ro = new ResizeObserver(fitFrame);
+  ro.observe(document.querySelector('.canvas-area'));
 }
 
 function render() {
